@@ -1,0 +1,255 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "katex/dist/katex.min.css";
+
+/* `dark:` utilities apply in both dark themes. */
+@custom-variant dark (&:where([data-theme="obsidian"], [data-theme="obsidian"] *, [data-theme="dark-gray"], [data-theme="dark-gray"] *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-inter);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-glow-from: var(--glow-from);
+  --color-glow-to: var(--glow-to);
+  --color-crosshair: var(--crosshair);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ── Obsidian (default) ─────────────────────────────────────────────────── */
+:root,
+[data-theme="obsidian"] {
+  color-scheme: dark;
+  --background: #030014;
+  --foreground: #ededf6;
+  --card: rgba(15, 14, 23, 0.75);
+  --card-foreground: #ededf6;
+  --popover: rgba(15, 14, 23, 0.94);
+  --popover-foreground: #ededf6;
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: #ededf6;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #a3a3b8;
+  --accent: rgba(99, 102, 241, 0.16);
+  --accent-foreground: #e0e7ff;
+  --destructive: #f43f5e;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #818cf8;
+  --chart-1: #6366f1;
+  --chart-2: #a855f7;
+  --chart-3: #38bdf8;
+  --chart-4: #f59e0b;
+  --chart-5: #f43f5e;
+  --radius: 0.75rem;
+  --sidebar: rgba(10, 9, 20, 0.85);
+  --sidebar-foreground: #ededf6;
+  --sidebar-primary: #6366f1;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(99, 102, 241, 0.16);
+  --sidebar-accent-foreground: #e0e7ff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #818cf8;
+
+  /* Amber "experimental / may contain errors" surface (AI problems). */
+  --warning: #f59e0b;
+  --warning-foreground: #fcd34d;
+
+  --glow-from: #6366f1;
+  --glow-to: #a855f7;
+  --glow-opacity: 0.35;
+  --crosshair: rgba(255, 255, 255, 0.4);
+  --grid-line: rgba(255, 255, 255, 0.035);
+}
+
+/* ── Dark Gray ──────────────────────────────────────────────────────────── */
+[data-theme="dark-gray"] {
+  color-scheme: dark;
+  --background: #0f0f11;
+  --foreground: #ececef;
+  --card: rgba(28, 28, 32, 0.8);
+  --card-foreground: #ececef;
+  --popover: rgba(28, 28, 32, 0.96);
+  --popover-foreground: #ececef;
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: #ececef;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #a1a1aa;
+  --accent: rgba(99, 102, 241, 0.14);
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+  --sidebar: rgba(20, 20, 23, 0.9);
+  --glow-opacity: 0.18;
+  --crosshair: rgba(255, 255, 255, 0.3);
+  --grid-line: rgba(255, 255, 255, 0.025);
+}
+
+/* ── Light ──────────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  color-scheme: light;
+  --background: #fafafa;
+  --foreground: #09090b;
+  --card: rgba(255, 255, 255, 0.8);
+  --card-foreground: #09090b;
+  --popover: rgba(255, 255, 255, 0.97);
+  --popover-foreground: #09090b;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(0, 0, 0, 0.04);
+  --secondary-foreground: #18181b;
+  --muted: rgba(0, 0, 0, 0.04);
+  --muted-foreground: #52525b;
+  --accent: rgba(79, 70, 229, 0.1);
+  --accent-foreground: #3730a3;
+  --destructive: #e11d48;
+  --border: rgba(0, 0, 0, 0.08);
+  --input: rgba(0, 0, 0, 0.12);
+  --ring: #6366f1;
+  --sidebar: rgba(255, 255, 255, 0.9);
+  --sidebar-foreground: #09090b;
+  --sidebar-primary: #4f46e5;
+  --sidebar-accent: rgba(79, 70, 229, 0.1);
+  --sidebar-accent-foreground: #3730a3;
+  --sidebar-border: rgba(0, 0, 0, 0.08);
+  --sidebar-ring: #6366f1;
+  --warning: #d97706;
+  --warning-foreground: #92400e;
+  --glow-opacity: 0.12;
+  --crosshair: rgba(0, 0, 0, 0.3);
+  --grid-line: rgba(0, 0, 0, 0.04);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(
+        ellipse 80% 50% at 50% -10%,
+        color-mix(in oklab, var(--glow-from) calc(var(--glow-opacity) * 100%), transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        ellipse 50% 40% at 85% 10%,
+        color-mix(in oklab, var(--glow-to) calc(var(--glow-opacity) * 70%), transparent),
+        transparent 70%
+      );
+    background-attachment: fixed;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Translucent "Evervault" surface. */
+/* JetBrains Mono tabular figures for metrics. */
+@utility metric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Floating pill navbar surface. */
+@utility pill-surface {
+  background-color: var(--popover);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 8px 32px -12px color-mix(in oklab, var(--glow-from) 35%, transparent);
+}
+
+@utility glass-card {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Faint square grid backdrop. */
+@utility bg-grid {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Indigo → purple gradient text. */
+@utility text-glow-gradient {
+  background-image: linear-gradient(90deg, var(--glow-from), var(--glow-to));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* One "+" crosshair marker; positioned at a card corner by <CrosshairCard>. */
+@utility crosshair-mark {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--crosshair), var(--crosshair)) center / 1px 100% no-repeat,
+    linear-gradient(var(--crosshair), var(--crosshair)) center / 100% 1px no-repeat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+dialog::backdrop {
+  background: rgba(3, 0, 20, 0.6);
+  backdrop-filter: blur(4px);
+}

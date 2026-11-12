@@ -1,0 +1,670 @@
+// VaultLearn — PostgreSQL data model (Supabase-compatible).
+//
+// Conventions
+// - Models/fields are PascalCase/camelCase in TypeScript; tables/columns are snake_case in SQL (@@map / @map).
+// - All primary keys are UUIDs (v7 = time-ordered). `User.id` equals Supabase `auth.users.id` when using Supabase Auth.
+// - Every user-owned row carries `user_id` (denormalised where needed) so queries and RLS can scope by owner cheaply.
+// - IndexedDB (local mode) object stores mirror these model + field names 1:1.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Language {
+  VI
+  EN
+
+  @@map("language")
+}
+
+enum ThemePreference {
+  OBSIDIAN
+  DARK_GRAY
+  LIGHT
+
+  @@map("theme_preference")
+}
+
+enum AuthProvider {
+  SUPABASE
+  CREDENTIALS
+
+  @@map("auth_provider")
+}
+
+enum AiProvider {
+  GEMINI
+  OPENAI
+  ANTHROPIC
+  CUSTOM // OpenAI-compatible endpoint (UserApiKey.baseUrl)
+
+  @@map("ai_provider")
+}
+
+enum FileKind {
+  PDF
+  IMAGE
+
+  @@map("file_kind")
+}
+
+enum UploadStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+
+  @@map("upload_status")
+}
+
+enum OcrStatus {
+  MANUAL // card typed in by hand, no OCR involved
+  PENDING
+  PROCESSING
+  NEEDS_REVIEW // OCR finished, waiting for the user to confirm/edit
+  DONE
+  FAILED
+
+  @@map("ocr_status")
+}
+
+/// FSRS card state.
+enum CardState {
+  NEW
+  LEARNING
+  REVIEW
+  RELEARNING
+
+  @@map("card_state")
+}
+
+/// FSRS grade. Numeric mapping in src/lib/fsrs.ts: AGAIN=1, HARD=2, GOOD=3, EASY=4.
+enum Rating {
+  AGAIN
+  HARD
+  GOOD
+  EASY
+
+  @@map("rating")
+}
+
+enum TagOrigin {
+  BASE // one of the 4 seeded base tags
+  USER // created manually by the user
+  AI_ACCEPTED // created from an accepted AI suggestion
+
+  @@map("tag_origin")
+}
+
+enum TagAssigner {
+  USER
+  AI
+
+  @@map("tag_assigner")
+}
+
+enum TagSuggestionKind {
+  CREATE
+  RENAME
+  MERGE
+
+  @@map("tag_suggestion_kind")
+}
+
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+
+  @@map("suggestion_status")
+}
+
+enum SynthesisMode {
+  CLONE // variation of a single source question
+  MIX // fusion of 2–3 source questions
+
+  @@map("synthesis_mode")
+}
+
+enum ExamPrepStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+
+  @@map("exam_prep_status")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Accounts, BYOK vault, Second Brain
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id                      String          @id @default(uuid(7)) @db.Uuid
+  email                   String          @unique
+  displayName             String?         @map("display_name")
+  avatarUrl               String?         @map("avatar_url")
+  authProvider            AuthProvider    @default(SUPABASE) @map("auth_provider")
+  /// Only for self-hosted CREDENTIALS auth (argon2/scrypt hash). Null when Supabase manages auth.
+  passwordHash            String?         @map("password_hash")
+  uiLanguage              Language        @default(VI) @map("ui_language")
+  /// Fallback AI output language when neither the subject nor the API key specifies one.
+  defaultAiOutputLanguage Language        @default(VI) @map("default_ai_output_language")
+  theme                   ThemePreference @default(OBSIDIAN)
+  timezone                String          @default("Asia/Ho_Chi_Minh")
+
+  // FSRS preferences
+  desiredRetention Float   @default(0.9) @map("desired_retention")
+  maximumInterval  Int     @default(36500) @map("maximum_interval")
+  /// Custom FSRS-6 weights (21 values). Empty = built-in defaults.
+  fsrsWeights      Float[] @default([]) @map("fsrs_weights")
+  enableFuzz       Boolean @default(true) @map("enable_fuzz")
+  dailyNewLimit    Int     @default(20) @map("daily_new_limit")
+  dailyReviewLimit Int     @default(200) @map("daily_review_limit")
+
+  onboardedAt  DateTime? @map("onboarded_at")
+  lastActiveAt DateTime? @map("last_active_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  apiKeys             UserApiKey[]
+  persona             UserAiPersona?
+  subjects            Subject[]
+  topics              Topic[]
+  examUploads         ExamUpload[]
+  mistakeCards        MistakeCard[]
+  attemptLogs         CardAttemptLog[]
+  tags                AdaptiveTag[]
+  tagSuggestions      TagSuggestionFeedback[]
+  examPrepSessions    ExamPrepSession[]
+  synthesizedProblems AiSynthesizedProblem[]
+
+  @@map("users")
+}
+
+/// BYOK API key. `encryptedKey` is an AES-256-GCM envelope produced by src/lib/crypto.ts — never plaintext.
+model UserApiKey {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  userId           String     @map("user_id") @db.Uuid
+  provider         AiProvider
+  label            String
+  encryptedKey     String     @map("encrypted_key")
+  /// Master-key id embedded in the envelope; lets us find rows that still need re-encryption after rotation.
+  encryptionKeyId  String     @map("encryption_key_id")
+  /// Last 4 characters of the plaintext key, for display only.
+  keyHint          String     @map("key_hint") @db.VarChar(8)
+  /// Required for CUSTOM (OpenAI-compatible) providers; optional override otherwise.
+  baseUrl          String?    @map("base_url")
+  defaultModel     String?    @map("default_model")
+  /// Vision-capable model used by the exam scanner OCR. Falls back to defaultModel.
+  visionModel      String?    @map("vision_model")
+  /// AI output language bound to this key. Null = User.defaultAiOutputLanguage.
+  aiOutputLanguage Language?  @map("ai_output_language")
+  isDefault        Boolean    @default(false) @map("is_default")
+  isActive         Boolean    @default(true) @map("is_active")
+  lastUsedAt       DateTime?  @map("last_used_at")
+  lastValidatedAt  DateTime?  @map("last_validated_at")
+  lastErrorMessage String?    @map("last_error_message")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredBySubjects Subject[]
+  synthesizedProblems AiSynthesizedProblem[]
+
+  @@unique([userId, label])
+  @@index([userId, provider])
+  @@map("user_api_keys")
+}
+
+/// "Second Brain" global learner persona (1:1 with User).
+model UserAiPersona {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  userId             String    @unique @map("user_id") @db.Uuid
+  /// Natural-language persona summary injected into AI prompts.
+  summary            String    @default("")
+  strengths          String[]  @default([])
+  weaknesses         String[]  @default([])
+  /// Structured habits, e.g. { "rushesUnderTime": true, "skipsUnits": 0.4 }.
+  learningHabits     Json?     @map("learning_habits")
+  /// Explanation-style preferences, e.g. { "verbosity": "concise", "showAlternativeMethods": true }.
+  preferences        Json?
+  version            Int       @default(0)
+  sourceAttemptCount Int       @default(0) @map("source_attempt_count")
+  isStale            Boolean   @default(true) @map("is_stale")
+  lastSyncedAt       DateTime? @map("last_synced_at")
+  lastSyncModel      String?   @map("last_sync_model")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_ai_personas")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subjects & topics
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Subject {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  name              String
+  slug              String
+  description       String?
+  color             String?
+  icon              String?
+  /// Highest-priority AI output language for everything generated inside this subject.
+  aiOutputLanguage  Language? @map("ai_output_language")
+  preferredApiKeyId String?   @map("preferred_api_key_id") @db.Uuid
+  examDate          DateTime? @map("exam_date")
+  sortOrder         Int       @default(0) @map("sort_order")
+
+  // Per-subject Second Brain memory (rebuilt by "Re-learn / Sync Subject Memory")
+  memorySummary         String?   @map("memory_summary")
+  /// Structured insights, e.g. { "recurringMisconceptions": [...], "weakTopics": [...], "teacherEmphasis": [...] }.
+  memoryInsights        Json?     @map("memory_insights")
+  memoryVersion         Int       @default(0) @map("memory_version")
+  memorySourceCardCount Int       @default(0) @map("memory_source_card_count")
+  /// True when cards/notes changed after the last sync.
+  memoryStale           Boolean   @default(false) @map("memory_stale")
+  memoryUpdatedAt       DateTime? @map("memory_updated_at")
+
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  user                User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredApiKey     UserApiKey?             @relation(fields: [preferredApiKeyId], references: [id], onDelete: SetNull)
+  topics              Topic[]
+  examUploads         ExamUpload[]
+  mistakeCards        MistakeCard[]
+  tags                AdaptiveTag[]
+  tagSuggestions      TagSuggestionFeedback[]
+  examPrepSessions    ExamPrepSession[]
+  synthesizedProblems AiSynthesizedProblem[]
+
+  @@unique([userId, slug])
+  @@index([userId, sortOrder])
+  @@map("subjects")
+}
+
+model Topic {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  subjectId String   @map("subject_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
+  name      String
+  slug      String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject             Subject                @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  parent              Topic?                 @relation("TopicTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children            Topic[]                @relation("TopicTree")
+  mistakeCards        MistakeCard[]
+  synthesizedProblems AiSynthesizedProblem[]
+
+  @@unique([subjectId, slug])
+  @@index([userId])
+  @@index([parentId])
+  @@map("topics")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Exam scanner
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExamUpload {
+  id               String       @id @default(uuid(7)) @db.Uuid
+  userId           String       @map("user_id") @db.Uuid
+  subjectId        String?      @map("subject_id") @db.Uuid
+  title            String
+  /// e.g. "Đề thi thử THPT 2026 – Chuyên KHTN", "Midterm – Mr. Nam".
+  sourceLabel      String?      @map("source_label")
+  fileKind         FileKind     @map("file_kind")
+  mimeType         String       @map("mime_type")
+  /// Supabase Storage bucket (remote) — null in local mode where the blob lives in IndexedDB.
+  storageBucket    String?      @map("storage_bucket")
+  storagePath      String       @map("storage_path")
+  /// IMAGE uploads: one storage path per page (phone photos shot as a multi-page exam), in page order; `storagePath`
+  /// is the first. Empty for PDFs (the PDF itself is `storagePath`).
+  pageStoragePaths String[]     @default([]) @map("page_storage_paths")
+  fileSizeBytes    Int          @map("file_size_bytes")
+  pageCount        Int?         @map("page_count")
+  /// SHA-256 of the file bytes (hex) — dedupes repeated uploads per user.
+  sha256           String
+  status           UploadStatus @default(UPLOADED)
+  errorMessage     String?      @map("error_message")
+  examDate         DateTime?    @map("exam_date")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject      Subject?      @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  mistakeCards MistakeCard[]
+
+  @@unique([userId, sha256])
+  @@index([userId, createdAt])
+  @@map("exam_uploads")
+}
+
+/// A wrong question captured from an exam (or typed manually) and scheduled with FSRS.
+///
+/// Crop geometry JSON (`cropBox`, `figureBox`) is normalised to the source page (0–1):
+///   { "page": 1, "x": 0.12, "y": 0.30, "w": 0.76, "h": 0.18 }
+/// `figureBox` is the optional sub-box (normally inside `cropBox`, but it may sit alongside it on the same page)
+/// whose pixels are preserved as `diagramImagePath`.
+model MistakeCard {
+  id           String  @id @default(uuid(7)) @db.Uuid
+  userId       String  @map("user_id") @db.Uuid
+  subjectId    String  @map("subject_id") @db.Uuid
+  topicId      String? @map("topic_id") @db.Uuid
+  examUploadId String? @map("exam_upload_id") @db.Uuid
+
+  title              String?
+  /// Clean Markdown + LaTeX rewrite of the question (handwriting/marks removed).
+  questionLatex      String  @map("question_latex")
+  /// What the student originally (wrongly) answered.
+  userAnswerLatex    String? @map("user_answer_latex")
+  correctAnswerLatex String? @map("correct_answer_latex")
+  solutionLatex      String? @map("solution_latex")
+
+  // Scanner artefacts
+  sourcePage       Int?      @map("source_page")
+  cropBox          Json?     @map("crop_box")
+  figureBox        Json?     @map("figure_box")
+  /// Storage path of the preserved figure/graph crop (optional).
+  diagramImagePath String?   @map("diagram_image_path")
+  /// Storage path of the untouched original crop (optional, for side-by-side verification).
+  originalCropPath String?   @map("original_crop_path")
+  ocrStatus        OcrStatus @default(MANUAL) @map("ocr_status")
+  ocrModel         String?   @map("ocr_model")
+  ocrConfidence    Float?    @map("ocr_confidence")
+  ocrRawText       String?   @map("ocr_raw_text")
+
+  /// Personal "Aha!" note written at capture time: why the student missed it / the key trick learned. Optional.
+  ahaNote String? @map("aha_note")
+
+  /// "Teacher's Favorite / High-Yield" flag — prioritised by Exam Prep & the synthesizer.
+  isHighYield   Boolean @default(false) @map("is_high_yield")
+  /// Teacher meta-note (what the teacher stressed). May be set without the high-yield flag. Optional.
+  highYieldNote String? @map("high_yield_note")
+
+  // FSRS scheduling state (see src/lib/fsrs.ts)
+  state         CardState @default(NEW)
+  due           DateTime  @default(now())
+  stability     Float     @default(0)
+  difficulty    Float     @default(0)
+  elapsedDays   Int       @default(0) @map("elapsed_days")
+  scheduledDays Int       @default(0) @map("scheduled_days")
+  /// Index of the current (re)learning step.
+  learningSteps Int       @default(0) @map("learning_steps")
+  reps          Int       @default(0)
+  lapses        Int       @default(0)
+  lastReviewAt  DateTime? @map("last_review_at")
+  /// Monotonic counter used to assign CardAttemptLog.attemptNumber inside a transaction.
+  attemptCount  Int       @default(0) @map("attempt_count")
+
+  isSuspended Boolean   @default(false) @map("is_suspended")
+  archivedAt  DateTime? @map("archived_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user                User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject             Subject                      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topic               Topic?                       @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  examUpload          ExamUpload?                  @relation(fields: [examUploadId], references: [id], onDelete: SetNull)
+  tags                MistakeCardTag[]
+  attempts            CardAttemptLog[]
+  synthesisSources    AiSynthesizedProblemSource[]
+  promotedFromProblem AiSynthesizedProblem?        @relation("PromotedCard")
+
+  @@index([userId, due])
+  @@index([userId, subjectId, due])
+  @@index([userId, isHighYield])
+  @@index([topicId])
+  @@index([examUploadId])
+  @@map("mistake_cards")
+}
+
+/// One review of a MistakeCard: the "Attempt 1, Attempt 2, Attempt 3…" history with notes and FSRS snapshots.
+model CardAttemptLog {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  cardId               String   @map("card_id") @db.Uuid
+  /// 1-based, sequential per card.
+  attemptNumber        Int      @map("attempt_number")
+  rating               Rating
+  note                 String?
+  userAnswerLatex      String?  @map("user_answer_latex")
+  timeSpentMs          Int?     @map("time_spent_ms")
+  /// Set when this attempt was answered on an AI "mutate numbers" variant instead of the original question.
+  variantQuestionLatex String?  @map("variant_question_latex")
+  reviewedAt           DateTime @default(now()) @map("reviewed_at")
+
+  // FSRS snapshot (before → after) — enough to re-train personalised weights later.
+  stateBefore      CardState @map("state_before")
+  stateAfter       CardState @map("state_after")
+  stabilityBefore  Float     @map("stability_before")
+  stabilityAfter   Float     @map("stability_after")
+  difficultyBefore Float     @map("difficulty_before")
+  difficultyAfter  Float     @map("difficulty_after")
+  /// Predicted recall probability at the moment of review (null for NEW cards).
+  retrievability   Float?
+  elapsedDays      Int       @map("elapsed_days")
+  scheduledDays    Int       @map("scheduled_days")
+  learningSteps    Int       @map("learning_steps")
+  dueBefore        DateTime  @map("due_before")
+  dueAfter         DateTime  @map("due_after")
+
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card MistakeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, attemptNumber])
+  @@index([userId, reviewedAt])
+  @@map("card_attempt_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Adaptive error tagging
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The four BASE tags are seeded per subject (scopeKey = subjectId), so an accepted RENAME in one subject (e.g. IELTS)
+/// never leaks into another (e.g. TSA Math). Global tags (subjectId = null) remain possible for user-made tags.
+model AdaptiveTag {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  /// Null = global tag usable in every subject.
+  subjectId    String?   @map("subject_id") @db.Uuid
+  /// Uniqueness scope: equals `subjectId` or the literal "global". Exists because Postgres treats NULLs as
+  /// distinct in unique indexes, which would allow duplicate global tags. Always write it alongside subjectId.
+  scopeKey     String    @default("global") @map("scope_key")
+  name         String
+  slug         String
+  /// GUI translation key for base tags (e.g. "tags.base.concept_gap"); null for user/AI tags.
+  i18nKey      String?   @map("i18n_key")
+  description  String?
+  color        String?
+  origin       TagOrigin @default(USER)
+  usageCount   Int       @default(0) @map("usage_count")
+  /// Set when this tag was merged into another via an accepted MERGE suggestion.
+  mergedIntoId String?   @map("merged_into_id") @db.Uuid
+  archivedAt   DateTime? @map("archived_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject    Subject?         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  mergedInto AdaptiveTag?     @relation("TagMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom AdaptiveTag[]    @relation("TagMerge")
+  cards      MistakeCardTag[]
+
+  suggestionsTargeting  TagSuggestionFeedback[] @relation("SuggestionTarget")
+  suggestionsMergeInto  TagSuggestionFeedback[] @relation("SuggestionMergeInto")
+  suggestionsResultedIn TagSuggestionFeedback[] @relation("SuggestionResult")
+
+  @@unique([userId, scopeKey, slug])
+  @@index([subjectId])
+  @@map("adaptive_tags")
+}
+
+model MistakeCardTag {
+  cardId     String      @map("card_id") @db.Uuid
+  tagId      String      @map("tag_id") @db.Uuid
+  assignedBy TagAssigner @default(USER) @map("assigned_by")
+  /// Model confidence when assignedBy = AI.
+  confidence Float?
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  card MistakeCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  tag  AdaptiveTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, tagId])
+  @@index([tagId])
+  @@map("mistake_card_tags")
+}
+
+/// AI tag suggestion (CREATE / RENAME / MERGE) and the user's Accept / Reject(+reason) decision.
+/// Rejection reasons are fed back into future suggestion prompts.
+model TagSuggestionFeedback {
+  id                  String            @id @default(uuid(7)) @db.Uuid
+  userId              String            @map("user_id") @db.Uuid
+  subjectId           String?           @map("subject_id") @db.Uuid
+  kind                TagSuggestionKind
+  /// RENAME: tag to rename. MERGE: tag to be merged away.
+  targetTagId         String?           @map("target_tag_id") @db.Uuid
+  /// MERGE: surviving tag.
+  mergeIntoTagId      String?           @map("merge_into_tag_id") @db.Uuid
+  proposedName        String?           @map("proposed_name")
+  proposedDescription String?           @map("proposed_description")
+  /// The model's reasoning, shown to the user.
+  rationale           String
+  /// MistakeCard ids whose notes motivated the suggestion.
+  evidenceCardIds     String[]          @default([]) @map("evidence_card_ids") @db.Uuid
+  status              SuggestionStatus  @default(PENDING)
+  rejectionReason     String?           @map("rejection_reason")
+  /// Tag created/renamed/kept as a result of acceptance.
+  resultingTagId      String?           @map("resulting_tag_id") @db.Uuid
+  aiProvider          AiProvider?       @map("ai_provider")
+  aiModel             String?           @map("ai_model")
+  outputLanguage      Language          @map("output_language")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  resolvedAt          DateTime?         @map("resolved_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject      Subject?     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  targetTag    AdaptiveTag? @relation("SuggestionTarget", fields: [targetTagId], references: [id], onDelete: SetNull)
+  mergeIntoTag AdaptiveTag? @relation("SuggestionMergeInto", fields: [mergeIntoTagId], references: [id], onDelete: SetNull)
+  resultingTag AdaptiveTag? @relation("SuggestionResult", fields: [resultingTagId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([subjectId])
+  @@map("tag_suggestion_feedback")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scoped exam prep & AI problem synthesizer
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExamPrepSession {
+  id                 String         @id @default(uuid(7)) @db.Uuid
+  userId             String         @map("user_id") @db.Uuid
+  subjectId          String         @map("subject_id") @db.Uuid
+  title              String
+  examDate           DateTime?      @map("exam_date")
+  /// Scope filters (empty array = no filter on that dimension).
+  topicIds           String[]       @default([]) @map("topic_ids") @db.Uuid
+  tagIds             String[]       @default([]) @map("tag_ids") @db.Uuid
+  fromDate           DateTime?      @map("from_date")
+  toDate             DateTime?      @map("to_date")
+  highYieldOnly      Boolean        @default(false) @map("high_yield_only")
+  includeSynthesized Boolean        @default(true) @map("include_synthesized")
+  targetProblemCount Int?           @map("target_problem_count")
+  status             ExamPrepStatus @default(DRAFT)
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject             Subject                @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  synthesizedProblems AiSynthesizedProblem[]
+
+  @@index([userId, subjectId])
+  @@map("exam_prep_sessions")
+}
+
+/// AI-generated practice problem. Always rendered with the "[Experimental AI Problem]" badge.
+model AiSynthesizedProblem {
+  id                 String        @id @default(uuid(7)) @db.Uuid
+  userId             String        @map("user_id") @db.Uuid
+  subjectId          String        @map("subject_id") @db.Uuid
+  topicId            String?       @map("topic_id") @db.Uuid
+  examPrepSessionId  String?       @map("exam_prep_session_id") @db.Uuid
+  mode               SynthesisMode
+  questionLatex      String        @map("question_latex")
+  answerLatex        String?       @map("answer_latex")
+  solutionLatex      String?       @map("solution_latex")
+  /// Text description of a figure the problem needs (models can't reliably draw geometry).
+  diagramDescription String?       @map("diagram_description")
+  /// 1–10 model estimate.
+  difficultyEstimate Float?        @map("difficulty_estimate")
+  /// The model's own independent re-solve / substitution check, shown next to the solution.
+  verificationLatex  String?       @map("verification_latex")
+  /// Bumped every time the problem is corrected through "report & fix with AI".
+  revision           Int           @default(0)
+  isExperimental     Boolean       @default(true) @map("is_experimental")
+  /// True when high-yield source cards/notes were prioritised in the prompt.
+  usedHighYield      Boolean       @default(false) @map("used_high_yield")
+  outputLanguage     Language      @map("output_language")
+  apiKeyId           String?       @map("api_key_id") @db.Uuid
+  aiProvider         AiProvider    @map("ai_provider")
+  aiModel            String        @map("ai_model")
+  promptVersion      String        @map("prompt_version")
+  /// User quality rating 1–5.
+  userRating         Int?          @map("user_rating")
+  isFlaggedIncorrect Boolean       @default(false) @map("is_flagged_incorrect")
+  flagReason         String?       @map("flag_reason")
+  /// Set when the user promotes this problem into a real MistakeCard.
+  promotedCardId     String?       @unique @map("promoted_card_id") @db.Uuid
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  user            User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject         Subject                      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topic           Topic?                       @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  examPrepSession ExamPrepSession?             @relation(fields: [examPrepSessionId], references: [id], onDelete: SetNull)
+  apiKey          UserApiKey?                  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  promotedCard    MistakeCard?                 @relation("PromotedCard", fields: [promotedCardId], references: [id], onDelete: SetNull)
+  sources         AiSynthesizedProblemSource[]
+
+  @@index([userId, subjectId, createdAt])
+  @@index([examPrepSessionId])
+  @@map("ai_synthesized_problems")
+}
+
+/// Source MistakeCards a synthesized problem was cloned from (1) or mixed from (2–3).
+model AiSynthesizedProblemSource {
+  problemId String @map("problem_id") @db.Uuid
+  cardId    String @map("card_id") @db.Uuid
+  /// Order in which the sources were presented to the model.
+  position  Int    @default(0)
+
+  problem AiSynthesizedProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  card    MistakeCard          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@id([problemId, cardId])
+  @@index([cardId])
+  @@map("ai_synthesized_problem_sources")
+}
