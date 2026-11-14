@@ -9,11 +9,14 @@ export function Dropdown({
   trigger,
   children,
   align = "end",
+  side = "bottom",
   className,
 }: {
   trigger: (props: { open: boolean; toggle: () => void; id: string }) => React.ReactNode;
   children: (close: () => void) => React.ReactNode;
   align?: "start" | "end";
+  /** Open below (default) or above the trigger. */
+  side?: "bottom" | "top";
   className?: string;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -46,7 +49,8 @@ export function Dropdown({
         <div
           id={id}
           className={cn(
-            "glass-card absolute top-full z-50 mt-2 min-w-48 rounded-xl bg-popover p-1.5 shadow-xl",
+            "absolute z-50 min-w-48 rounded-lg border border-border bg-popover p-1.5 shadow-lg",
+            side === "top" ? "bottom-full mb-2" : "top-full mt-2",
             align === "end" ? "right-0" : "left-0",
             className,
           )}
@@ -63,7 +67,7 @@ export function MenuItem({ active, className, ...props }: React.ComponentProps<"
     <button
       type="button"
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none",
+        "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none",
         active && "bg-accent text-accent-foreground",
         className,
       )}

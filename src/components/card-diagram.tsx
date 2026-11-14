@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
-import { useObjectUrl } from "@/components/scanner/use-object-url";
+import { useObjectUrl } from "@/components/use-object-url";
 
 /** The preserved figure/graph crop of a card, loaded from local storage by path. Renders nothing when absent. */
 export function CardDiagram({ path, alt, caption }: { path: string | null; alt: string; caption?: string }) {

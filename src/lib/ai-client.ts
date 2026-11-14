@@ -1,12 +1,11 @@
 /**
- * Browser → Phase 4 AI routes. Only the stored ciphertext is sent (the server decrypts in memory); responses are
- * zod-validated before the UI touches them.
+ * Browser → AI routes. The request names one of the user's keys by id; the server loads and decrypts it for the
+ * signed-in user. Responses are zod-validated before the UI touches them.
  */
 import { z } from "zod";
 
 import { memorySyncResponseSchema, tagSuggestResponseSchema, type MemorySyncRequest, type MemorySyncResponse, type TagSuggestRequest, type TagSuggestResponse } from "@/lib/brain-prompt";
 import type { Language } from "@/lib/constants";
-import type { UserApiKey } from "@/lib/repo/types";
 import {
   fixResponseSchema, mutateResponseSchema, synthesizeResponseSchema, type FixRequest, type FixResponse, type MutateRequest, type MutateResponse, type SynthesizeRequest,
   type SynthesizeResponse,
@@ -20,14 +19,10 @@ export class AiRequestError extends Error {
 }
 
 export interface AiCall {
-  userId: string;
-  key: UserApiKey;
+  /** Id of the API key to use (one of the signed-in user's own). */
+  keyId: string;
   language: Language;
   signal?: AbortSignal;
-}
-
-function credentialOf(userId: string, key: UserApiKey) {
-  return { userId, provider: key.provider, encryptedKey: key.encryptedKey, baseUrl: key.baseUrl, defaultModel: key.defaultModel, visionModel: key.visionModel };
 }
 
 async function postJob<T>(path: string, call: AiCall, input: unknown, schema: z.ZodType<T>): Promise<T> {
@@ -37,7 +32,7 @@ async function postJob<T>(path: string, call: AiCall, input: unknown, schema: z.
       method: "POST",
       headers: { "content-type": "application/json" },
       signal: call.signal,
-      body: JSON.stringify({ credential: credentialOf(call.userId, call.key), language: call.language, input }),
+      body: JSON.stringify({ keyId: call.keyId, language: call.language, input }),
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw new AiRequestError("ABORTED");

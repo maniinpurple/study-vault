@@ -12,11 +12,11 @@ import { cn } from "@/lib/utils";
 export const RATING_DOT: Record<RatingName, string> = {
   AGAIN: "bg-destructive",
   HARD: "bg-warning",
-  GOOD: "bg-primary",
-  EASY: "bg-chart-3",
+  GOOD: "bg-success",
+  EASY: "bg-brand",
 };
 
-/** Chronological attempt log: "Lần 1 → Lần 2 → Lần 3 …" with rating, date, time spent and the reflection note. */
+/** Chronological attempt log: attempt 1, 2, 3 … with rating, date, time spent and the reflection note. */
 export function AttemptLog({ attempts }: { attempts: readonly CardAttemptLog[] }) {
   const { t, locale, user } = useVault();
   const dateFmt = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: user.timezone });
@@ -29,11 +29,11 @@ export function AttemptLog({ attempts }: { attempts: readonly CardAttemptLog[] }
         <li key={a.id} className="relative space-y-1">
           <span aria-hidden className={cn("absolute top-1.5 -left-[21px] size-2.5 rounded-full ring-4 ring-background", RATING_DOT[a.rating])} />
           <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-            <span className="metric font-semibold text-foreground">{format(t.review.attemptNo, { n: a.attemptNumber })}</span>
+            <span className="tabular-nums font-semibold text-foreground">{format(t.review.attemptNo, { n: a.attemptNumber })}</span>
             <span className="text-muted-foreground">{dateFmt.format(a.reviewedAt)}</span>
             <span className="font-medium">{t.review.ratings[a.rating]}</span>
             {a.timeSpentMs !== null && (
-              <span className="metric text-muted-foreground">
+              <span className="tabular-nums text-muted-foreground">
                 · {a.timeSpentMs < 90_000 ? format(t.review.seconds, { n: Math.round(a.timeSpentMs / 1000) }) : format(t.review.units.minute, { n: Math.round(a.timeSpentMs / 60_000) })}
               </span>
             )}

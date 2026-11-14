@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultCardTitle, draftSaveProblem, groupTopics, mapWithConcurrency, pickOcrKey, scanAiLanguage } from "@/lib/scan-session";
+import { groupTopics, mapWithConcurrency, pickOcrKey, scanAiLanguage } from "@/lib/scan-session";
 import type { Topic, UserApiKey } from "@/lib/repo/types";
 
 const key = (id: string, extra: Partial<UserApiKey> = {}) => ({ id, isActive: true, isDefault: false, aiOutputLanguage: null, ...extra }) as UserApiKey;
@@ -25,21 +25,6 @@ describe("scanAiLanguage", () => {
     expect(scanAiLanguage(null, null, user)).toBe("VI");
     expect(scanAiLanguage(null, { aiOutputLanguage: "EN" }, user)).toBe("EN");
     expect(scanAiLanguage({ aiOutputLanguage: "VI" }, { aiOutputLanguage: "EN" }, user)).toBe("VI");
-  });
-});
-
-describe("draftSaveProblem", () => {
-  it("requires only question text and a subject — never a note", () => {
-    expect(draftSaveProblem({ questionLatex: "  ", subjectId: "s" })).toBe("EMPTY_QUESTION");
-    expect(draftSaveProblem({ questionLatex: "x", subjectId: null })).toBe("NO_SUBJECT");
-    expect(draftSaveProblem({ questionLatex: "x", subjectId: "s" })).toBeNull();
-  });
-});
-
-describe("defaultCardTitle", () => {
-  it("includes the page only for multi-page files and strips the extension", () => {
-    expect(defaultCardTitle("Midterm.pdf", 3, 2, 10)).toBe("Midterm · p.3 · Q2");
-    expect(defaultCardTitle("IMG_2041.JPG", 1, 1, 1)).toBe("IMG_2041 · Q1");
   });
 });
 

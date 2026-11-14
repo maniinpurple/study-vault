@@ -33,14 +33,14 @@ describe("card digest", () => {
     const digest = buildCardDigest({ ...ctx, subjectId: "s1" });
     expect(digest.map((d) => d.id)).toEqual(["noisy", "medium", "quiet"]);
     expect(digest.map((d) => d.ref)).toEqual(["C1", "C2", "C3"]);
-    expect(digest[0]).toMatchObject({ topic: "Logarit", highYield: true, teacherNote: "Cô nói sẽ thi", tags: ["Sai tính toán / Thao tác", "Quên điều kiện"] });
+    expect(digest[0]).toMatchObject({ topic: "Logarit", highYield: true, teacherNote: "Cô nói sẽ thi", tags: ["Tính toán sai", "Quên điều kiện"] });
     expect(digest[0].attempts.map((a) => [a.n, a.rating, a.variant])).toEqual([[1, "AGAIN", true], [2, "GOOD", false]]);
     expect(buildCardDigest({ ...ctx, subjectId: "s1", options: { withNotesOnly: true } }).map((d) => d.id)).toEqual(["noisy"]);
     expect(buildCardDigest({ ...ctx, subjectId: "s1", options: { maxCards: 1 } })).toHaveLength(1);
   });
   it("labels the subject's tags with usage counts inside that subject", () => {
     expect(buildTagDigest({ ...ctx, subjectId: "s1" })).toEqual([
-      { ref: "T1", id: "base1", name: "Sai tính toán / Thao tác", base: true, uses: 1 },
+      { ref: "T1", id: "base1", name: "Tính toán sai", base: true, uses: 1 },
       { ref: "T2", id: "u1", name: "Quên điều kiện", base: false, uses: 1 },
     ]);
   });

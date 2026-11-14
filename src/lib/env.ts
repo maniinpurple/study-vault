@@ -2,10 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
-/**
- * Server environment, validated once. Everything is optional so the app boots with zero configuration
- * (local IndexedDB mode); features light up as variables are provided.
- */
+/** Server environment, validated once. See `.env.example` for what each variable does. */
 const optionalString = z
   .string()
   .trim()
@@ -14,21 +11,19 @@ const optionalString = z
 
 const serverEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  /** Pooled Postgres URL used by the app (Supabase: the pgBouncer/Supavisor URL). */
+  /** Postgres URL. Used by the app when no pooled URL is set, and by Prisma Migrate when DIRECT_URL is not set. */
   DATABASE_URL: optionalString,
-  /** Direct Postgres URL used by Prisma Migrate (Supabase: port 5432). */
+  /** Pooled Postgres URL (PgBouncer / Neon pooler). Preferred by the app at runtime. */
+  DATABASE_URL_POOLED: optionalString,
+  /** Direct Postgres URL for Prisma Migrate, when DATABASE_URL itself is pooled. */
   DIRECT_URL: optionalString,
-  /** Force a data mode; otherwise inferred from DATABASE_URL. */
-  DATA_MODE: z.enum(["local", "remote"]).optional(),
+  /** Auth.js signing secret for session cookies. */
+  AUTH_SECRET: optionalString,
   VAULT_ENCRYPTION_KEY: optionalString,
   VAULT_ENCRYPTION_KEYS_PREVIOUS: optionalString,
-  NEXT_PUBLIC_SUPABASE_URL: optionalString,
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: optionalString,
-  SUPABASE_SERVICE_ROLE_KEY: optionalString,
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
-export type DataMode = "local" | "remote";
 
 let cached: ServerEnv | null = null;
 
@@ -42,12 +37,7 @@ export function getServerEnv(): ServerEnv {
   return cached;
 }
 
-/** `remote` when a Postgres URL is configured (or forced), otherwise `local` (IndexedDB in the browser). */
-export function getDataMode(env: ServerEnv = getServerEnv()): DataMode {
-  if (env.DATA_MODE) return env.DATA_MODE;
-  return env.DATABASE_URL ? "remote" : "local";
-}
-
-export function isSupabaseConfigured(env: ServerEnv = getServerEnv()): boolean {
-  return Boolean(env.NEXT_PUBLIC_SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+/** Connection string the running app uses: the pooled URL when there is one, otherwise DATABASE_URL. */
+export function databaseUrl(env: ServerEnv = getServerEnv()): string | undefined {
+  return env.DATABASE_URL_POOLED ?? env.DATABASE_URL;
 }

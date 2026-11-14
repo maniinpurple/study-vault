@@ -1,8 +1,7 @@
-/** Browser → `/api/ai/ocr`. The key never leaves as plaintext: the server decrypts the stored ciphertext in memory. */
+/** Browser → `/api/ai/ocr`. The request names a key by id; the server decrypts it in memory for the signed-in user. */
 import { z } from "zod";
 
 import type { Language } from "@/lib/constants";
-import type { UserApiKey } from "@/lib/repo/types";
 
 export class OcrRequestError extends Error {
   constructor(readonly code: string) {
@@ -19,7 +18,7 @@ const responseSchema = z.object({
 });
 export type OcrResponse = z.infer<typeof responseSchema>;
 
-export async function requestOcr(input: { userId: string; key: UserApiKey; language: Language; imageBase64: string; signal?: AbortSignal }): Promise<OcrResponse> {
+export async function requestOcr(input: { keyId: string; language: Language; imageBase64: string; signal?: AbortSignal }): Promise<OcrResponse> {
   let res: Response;
   try {
     res = await fetch("/api/ai/ocr", {
@@ -27,14 +26,7 @@ export async function requestOcr(input: { userId: string; key: UserApiKey; langu
       headers: { "content-type": "application/json" },
       signal: input.signal,
       body: JSON.stringify({
-        credential: {
-          userId: input.userId,
-          provider: input.key.provider,
-          encryptedKey: input.key.encryptedKey,
-          baseUrl: input.key.baseUrl,
-          defaultModel: input.key.defaultModel,
-          visionModel: input.key.visionModel,
-        },
+        keyId: input.keyId,
         image: { mimeType: "image/jpeg", data: input.imageBase64 },
         language: input.language,
       }),

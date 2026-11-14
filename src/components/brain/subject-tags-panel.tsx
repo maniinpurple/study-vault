@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Tags } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
@@ -63,8 +63,7 @@ export function SubjectTagsPanel({ subject }: { subject: Subject }) {
     <CrosshairCard className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <Tags className="size-4 text-primary" aria-hidden />
+          <h2 className="text-heading">
             {t.adaptive.title}
           </h2>
           <p className="max-w-2xl text-xs text-muted-foreground">{t.adaptive.subtitle}</p>
@@ -80,7 +79,7 @@ export function SubjectTagsPanel({ subject }: { subject: Subject }) {
           <li key={tag.id} className="flex items-center gap-2 rounded-full border border-border bg-muted/30 py-1 pr-1.5 pl-3 text-sm" title={tag.description ?? undefined}>
             <span className="size-2 rounded-full" style={{ backgroundColor: tag.color ?? "var(--muted-foreground)" }} aria-hidden />
             <span>{tagDisplayName(t, tag)}</span>
-            <span className="metric text-xs text-muted-foreground">{format(t.adaptive.uses, { n: uses(tag.id) })}</span>
+            <span className="tabular-nums text-xs text-muted-foreground">{format(t.adaptive.uses, { n: uses(tag.id) })}</span>
             {tag.origin !== "USER" && (
               <Badge variant={tag.origin === "AI_ACCEPTED" ? "default" : "outline"} className="text-[10px]">
                 {tag.origin === "AI_ACCEPTED" ? t.adaptive.aiTag : t.adaptive.base}

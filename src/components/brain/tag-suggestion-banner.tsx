@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Check, Loader2, Sparkles, X } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
@@ -83,12 +83,9 @@ export function TagSuggestionBanner({ subjectId, className }: { subjectId: strin
             animate={{ opacity: 1, y: 0 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}
-            className="glass-card flex flex-col gap-3 rounded-xl border-primary/30 p-3.5 sm:flex-row sm:items-center"
+            className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-xs sm:flex-row sm:items-center"
           >
             <div className="flex min-w-0 flex-1 gap-3">
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground">
-                <Sparkles className="size-4" aria-hidden />
-              </span>
               <div className="min-w-0 space-y-0.5">
                 <p className="text-xs text-muted-foreground">
                   {t.adaptive.bannerTitle}

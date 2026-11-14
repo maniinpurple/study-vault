@@ -3,8 +3,8 @@
 # VaultLearn — Architecture & Working Rules
 
 VaultLearn is a production-grade EdTech SaaS for students (primarily Vietnamese high-school / university
-STEM) that turns **wrong exam answers into a spaced-repetition "mistake vault"**, backed by a
-bring-your-own-key (BYOK) AI layer. Read this file fully before making changes.
+STEM) that turns **wrong exam answers into a spaced-repetition "Problem Vault"**, backed by a
+bring-your-own-key (BYOK) AI layer. Read this file and [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) (tokens, motion, copy rules) fully before making changes.
 
 ---
 
@@ -15,10 +15,10 @@ bring-your-own-key (BYOK) AI layer. Read this file fully before making changes.
 | Framework | **Next.js App Router**, TypeScript `strict`, React Server Components by default |
 | Styling | **Tailwind CSS v4** (CSS-first config in `src/app/globals.css`), **shadcn/ui** (`src/components/ui`) |
 | Motion / icons | **Framer Motion** (`framer-motion`), **Lucide** (`lucide-react`) |
-| Math | **KaTeX** (`katex`) — all question/solution content is stored as Markdown + LaTeX (`$…$`, `$$…$$`) |
-| PDF | **PDF.js** (`pdfjs-dist`) — render pages to `<canvas>` client-side for the crop tool; worker loaded from `pdfjs-dist/build/pdf.worker.min.mjs` |
-| DB (remote) | **PostgreSQL** via **Prisma** (`prisma/schema.prisma`); deployable on **Supabase** (Postgres + Auth + Storage) |
-| DB (local) | **IndexedDB** (structured data, blobs) + **localStorage** (small prefs) fallback so the app runs with zero setup |
+| Math | **KaTeX** (`katex`) — question/solution text is stored as Markdown + LaTeX (`$…$`, `$$…$$`); a question may also be image-only |
+| PDF | **PDF.js** (`pdfjs-dist`) — render pages to `<canvas>` client-side for the snip tool; worker loaded from `pdfjs-dist/build/pdf.worker.min.mjs` |
+| Database | **PostgreSQL** via **Prisma** (`prisma/schema.prisma`) — the only data store. Files (exam PDFs, crops) live in `stored_files` (bytea) |
+| Auth | **Auth.js v5** (`next-auth@beta`), Credentials provider, bcrypt (`bcryptjs`), JWT session cookie |
 | Validation | `zod` at every trust boundary (route handlers, server actions, AI JSON output) |
 | Tests | `vitest` (`npm test`) — pure logic in `src/lib/**` must have unit tests |
 
@@ -37,48 +37,80 @@ Package manager: **npm**. Path alias: `@/*` → `src/*`.
 - **shadcn 4 (`base-nova` style)** — primitives are built on **Base UI (`@base-ui/react`)**, not Radix. The CLI now
   generates `import { cn } from "cn"`; this repo uses `clsx` + `tailwind-merge` instead, so after every
   `npx shadcn add …` rewrite that import to `from "@/lib/utils"`.
-- **Tailwind 4** — no `tailwind.config`; tokens and custom utilities (`glass-card`, `bg-grid`, `crosshair-mark`,
-  `text-glow-gradient`) are declared in `globals.css`.
+- **Tailwind 4** — no `tailwind.config`; tokens and custom utilities (type roles `text-display` / `text-title` /
+  `text-heading` / `text-reading` / `text-caption` / `text-overline`, and `mark-ink`) are declared in `globals.css`.
+- **Cache Components + URL data** — `usePathname()` / `params` are runtime data on dynamic routes. The sidebar sits
+  behind `<Suspense>` in `app-shell.tsx`, and `/sources/[id]` reads `params` inside `<Suspense>`. Don't read the URL in
+  the shell outside a boundary or `next build` fails.
 - **zod 4** — use `z.prettifyError`, `z.email()` etc. (v4 APIs).
 - npm 11 blocks dependency install scripts by default (`npm install-scripts ls`). Prisma works without its
   postinstall; don't approve scripts without checking with the user.
 
-### Data modes
-`src/lib/env.ts` resolves `DATA_MODE`:
-- `remote` — `DATABASE_URL` is set → Prisma/Postgres is the source of truth. Multi-account lives in the `User` table.
-- `local` — no `DATABASE_URL` → all user data lives in IndexedDB, namespaced **per local account id** (multi-account
-  on one device). The UI must work identically in both modes; code against the repository interfaces, never
-  call Prisma or IndexedDB directly from components.
-- The Prisma client (`src/lib/db/prisma.ts`) is created lazily; importing it must never crash when `DATABASE_URL` is absent.
-- IndexedDB object stores mirror Prisma model names and field names 1:1 so data can be exported/imported to the cloud later.
+### Data access & isolation (read before touching data code)
+- **Server-only data.** The browser never talks to the database. `src/components/app-provider.tsx` calls the server
+  actions in `src/server/actions.ts` (each returns the user's fresh snapshot); files are served by `/api/files/[...path]`
+  and uploaded through `/api/sources` (multipart) or `createProblemAction`.
+- **Every action** (1) takes the user id from the verified session (`requireUserId()` in `src/server/session.ts`) —
+  never from arguments —, (2) validates its arguments with zod (`src/server/schemas.ts`; actions are public endpoints),
+  (3) calls `PrismaRepository` (`src/lib/repo/prisma.ts`), whose **every query carries `userId` in its `where`**
+  (link tables with no `user_id` are scoped through their card / problem). Ids from the client are UUID-checked first.
+- Secrets never leave the server: `passwordHash` and encrypted API keys are excluded from every returned shape
+  (`USER_SELECT`, `API_KEY_SELECT`). AI routes receive a **key id**, and `resolveCredential()` loads the signed-in user's own
+  active key. `/api/files` looks files up by path **and** user id (404 for anyone else's path).
+- The Prisma client (`src/lib/db/prisma.ts`) is lazy: importing it never touches the DB, so `next build` needs none.
+  The app uses `DATABASE_URL_POOLED` when set, else `DATABASE_URL`; Prisma Migrate uses `DIRECT_URL` → `DATABASE_URL`.
+- Never add a query without `userId` in its `where`. The only cross-user reads are the COUNTS and account identity on
+  `/admin` (`src/server/admin.ts`) — never anyone's study content.
+
+### Auth, roles, admin
+- `src/auth.config.ts` (edge-safe) + `src/auth.ts` (Credentials + bcrypt). `src/proxy.ts` redirects signed-out visitors to
+  `/login` (pages only; `/api` routes and server actions authenticate themselves). `/login` and `/register` are in the
+  `(auth)` route group, outside the app shell; registration is `registerAction` in `src/server/auth-actions.ts`.
+- `User.role` is `USER` (default) or `ADMIN`. `/admin` calls `requireAdmin()`, which reads the role from the database on
+  every request (not the JWT) and redirects non-admins to `/`. Promote an account with SQL, e.g.
+  `UPDATE users SET role = 'ADMIN' WHERE email = '…';`.
 
 ---
 
-## 2. Design system — "Evervault" dark aesthetic
+## 2. Design system — Paper & Dark
 
-Three themes, switched via `data-theme` on `<html>` (`obsidian` default, `dark-gray`, `light`). All colors are CSS
-variables in `globals.css`; **never hard-code hex values in components** — use the Tailwind tokens
-(`bg-background`, `bg-card`, `border-border`, `text-muted-foreground`, `bg-primary`, …).
+**[`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) is the source of truth** for color, type, spacing, motion and copy. Summary:
 
-**Obsidian (default):**
-- Background `#030014`.
-- Cards: `rgba(15, 14, 23, 0.75)` + `backdrop-blur-md` + `1px solid rgba(255,255,255,0.08)` border.
-- `+` crosshair markers at card corners (use the shared `<CrosshairCard>` / `.crosshair` utility, don't re-implement).
-- Electric indigo → purple radial glows: `#6366F1` → `#A855F7` (`--glow-from`, `--glow-to`); primary accent = indigo.
-- Subtle grid / noise backgrounds are fine; keep contrast ≥ WCAG AA for text.
+- **Two themes** via `data-theme` on `<html>`: `light` ("Paper": warm off-white, never pure white) and `dark` (warm graphite,
+  never pure black). `User.theme` still stores the Prisma enum; `THEME_CHOICES` offers `LIGHT` and `DARK_GRAY`, and the
+  legacy `OBSIDIAN` value renders as Dark (`THEME_ATTRIBUTE`). New accounts default to `LIGHT`.
+- **Tokens** are CSS variables in `globals.css`, authored in `oklch()`, one declaration per line.
+  `tests/design-tokens.test.ts` parses that file and enforces the WCAG contrast table — change a token and the test tells
+  you if a pair broke. **Never hard-code hex values in components**; use the Tailwind tokens (`bg-background`, `bg-sunken`,
+  `bg-card`, `border-border`, `text-muted-foreground`, `text-subtle`, `text-brand`, `bg-accent`, `bg-mark-soft`, …).
+- **Roles**: `primary` is ink (solid `foreground`) for the one primary action per view; `brand` (ink blue) is for state only —
+  focus, selection, links, progress; `mark` (highlighter yellow) is only for snipped regions and the priority flag.
+- **Type**: Inter for interface, Source Serif 4 for titles and question/solution content, JetBrains Mono for LaTeX source.
+  Use the type-role utilities, sentence case, and line-height ≥ 1.25 wherever Vietnamese can appear.
+- **Icons**: Lucide at a 1.5 stroke (global CSS). Only where functional: sidebar destinations, toolbar tools, icon-only
+  buttons (always with an accessible name). No icons in headings, badges, labelled buttons or empty states.
+- **No emoji anywhere** in the interface, and one language per string (enforced by `tests/i18n.test.ts`).
+- **Motion**: import presets from `src/lib/motion.ts` (`spring.snappy` / `smooth` / `lively`, `fade`); use `layoutId` for
+  moving selection (sidebar pill, segmented controls). `MotionConfig reducedMotion="user"` is set in the shell.
+- **Surfaces**: `<Surface>` (`src/components/crosshair-card.tsx`; `CrosshairCard` is a legacy alias) is the resting card:
+  hairline, 12px radius, `shadow-xs`.
 
-**Dark Gray:** neutral zinc-based dark (`#0f0f11`-ish), same glow accents, less saturation.
-**Light:** white/zinc-50 surfaces, indigo accent, glows reduced to soft tints, borders `rgba(0,0,0,0.08)`.
-
-Motion: Framer Motion for entrance/hover/layout transitions; keep durations 150–300 ms; respect `prefers-reduced-motion`.
+### Layout
+- `AppShell` = collapsible left sidebar (248px ↔ 60px rail, state in `localStorage`) + content. Nothing floats over content;
+  under 1024px the sidebar is a sheet opened from a slim top bar. The sidebar's subject list is the **global subject filter**
+  (`activeSubjectId`); theme, language and account controls live in its footer.
+- Routes: `src/app/(auth)/` (login, register: no shell), `src/app/(app)/` (provider + sidebar shell), and inside it
+  `(pages)/` (padded, centered column) and `sources/[id]` (the full-viewport workspace).
+- Page pattern: one serif `text-display` title, one sentence of description, primary action top-right; sections are
+  separated by a `text-overline` label and a hairline.
 
 ---
 
 ## 3. Language separation (two independent settings — never conflate them)
 
 1. **GUI language** (`User.uiLanguage`, `VI` | `EN`, default `VI`): all interface strings come from
-   `src/lib/i18n/dictionaries/{vi,en}.ts`. **No hard-coded user-facing strings in components.** Toggle is a `VI / EN`
-   switch in the header. Base tags have an `i18nKey` so their display names follow the GUI language.
+   `src/lib/i18n/dictionaries/{vi,en}.ts`, written to the copy rules and glossary in `DESIGN_SYSTEM.md` §8. **No
+   hard-coded user-facing strings in components.** The `VI / EN` switch is in the sidebar footer and in Settings. Base tags have an `i18nKey` so their display names follow the GUI language.
 2. **AI output language** (`Language` enum): resolved in this priority order:
    `Subject.aiOutputLanguage` → `UserApiKey.aiOutputLanguage` → `User.defaultAiOutputLanguage`.
    Every AI prompt builder MUST inject an explicit, non-negotiable language directive (system prompt + a final
@@ -91,23 +123,36 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
 ## 4. Core modules
 
 ### 4.1 Multi-account auth + BYOK API Vault
-- Remote: Supabase Auth (`User.id` = `auth.users.id` uuid). Local: local profiles in IndexedDB; switcher in the header.
+- One signed-in account per session (Auth.js). The sidebar footer shows that user and a sign-out action; there is no account switcher.
 - Providers: `GEMINI`, `OPENAI`, `ANTHROPIC` (Claude), `CUSTOM` (OpenAI-compatible `baseUrl`).
 - Keys are encrypted **server-side** with AES-256-GCM (`src/lib/crypto.ts`) using `VAULT_ENCRYPTION_KEY`
   (32 bytes, base64). Ciphertext envelope: `v1.<keyId>.<iv>.<tag>.<ciphertext>` (base64url), AAD binds
   `userId:provider` so ciphertexts cannot be swapped between rows/users.
 - **Plaintext keys never reach the browser after entry and are never logged.** Only `keyHint` (last 4) is displayed.
-- Local mode: the browser stores only the ciphertext (encrypted by a server route); AI calls send ciphertext to a
-  server route that decrypts in memory and proxies the provider call.
+- The plaintext key is sent once to `createApiKeyAction`, encrypted in the repository and stored only as ciphertext; AI
+  routes decrypt it in memory per request. The browser never holds the ciphertext.
 - Each key carries its own `aiOutputLanguage` and `defaultModel`.
 
-### 4.2 Multi-bounding-box Exam Scanner
-- Upload PDF or image → `ExamUpload`. PDF pages rendered with PDF.js to canvas.
-- User draws **multiple crop boxes** (one per wrong question) and optionally a **sub-box** inside each to preserve a
-  geometry figure / graph as an image. Boxes are stored **normalized (0–1) relative to the page**: `{ page, x, y, w, h }`.
-- AI OCR (vision model via the user's key) rewrites the crop into clean Markdown+LaTeX, **removing handwritten marks,
-  circles, ticks and crossings**; the figure sub-box is kept as `diagramImageUrl`; the raw crop as `originalCropUrl`.
-- Result becomes a `MistakeCard` (`ocrStatus` tracks the pipeline). User reviews/edits before saving.
+### 4.2 Sources → in-document snipping (`/sources`, `/sources/[id]`)
+- **Sources library** (`/sources`): upload a PDF or a set of photos → `ExamUpload` (deduplicated by sha256) with its files
+  and a page-1 thumbnail (`uploadThumbnailPath`, derived from the id — no column). A source belongs to a subject.
+- **Workspace** (`/sources/[id]`): split screen. Left: the document, continuous scroll, pages rendered lazily with PDF.js.
+  The **snip tool** is on by default — drag a box over a question. Right: the **snippets tray**.
+- A snip is saved **immediately** as a `MistakeCard` (`examUploadId`, `sourcePage`, `cropBox` normalized 0–1 as
+  `{ page, x, y, w, h }`, crop stored at `originalCropPath`, `questionLatex = ""`). **Saving never needs an API key.**
+  The crop animates from the page into its tray card; the page keeps a highlighter overlay per snip, numbered in reading
+  order (`orderSnips`), and clicking an overlay selects its card (and vice versa).
+- Each tray card keeps **image + error tags + solution + takeaway together** and autosaves (`ProblemFields`).
+- "Convert to text" is optional and per card: the vision model (user's key, `/api/ai/ocr`) rewrites the crop into clean
+  Markdown+LaTeX without handwritten marks. A problem therefore has text, an image, or both; UI that needs text
+  (number variants, the synthesizer) must handle image-only problems.
+- Deleting a source removes its files; its problems stay in the vault with `examUploadId = null`.
+
+### 4.2b Problem Vault (`/vault`)
+- Every saved problem in one place, each card showing the question (image or formatted math) with its solution and
+  takeaway. Standalone problems can be added (text and/or image).
+- `src/lib/vault.ts` (pure, tested) filters (subject, search ignoring diacritics, priority, review status), sorts and
+  groups (date, topic, source, error tag, review status); `reviewStatus()` lives in `src/lib/problems.ts`.
 
 ### 4.3 FSRS (zero-token, native) + Review Arena (`/review`)
 - `src/lib/fsrs.ts` is a dependency-free TypeScript implementation of **FSRS-6** (21 weights). No AI calls.
@@ -117,14 +162,15 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
 - Per-user `desiredRetention`, `maximumInterval`, optional custom `fsrsWeights`.
 - `src/lib/review.ts` (pure, tested) builds today's queue (local day boundary; (re)learning steps only within a 20-min
   learn-ahead window) and previews/applies grades — the button intervals and the stored result use the same scheduler.
-  The arena shows the clean question (+ figure) first; solution, notes, attempt log, reflection note and error tags only
-  after Reveal. "⚡ AI Đổi số liệu" (`/api/ai/mutate`, light tier) is the only AI call in the arena.
+  Review shows the question first (clean text + figure, or the crop image for image-only problems); solution, notes,
+  attempt log, reflection note and error tags only after "Show answer". "New numbers" (`/api/ai/mutate`, light tier) is
+  the only AI call in review and needs question text.
 
 ### 4.4 "Second Brain" AI memory
 - `UserAiPersona` (1:1 user): hidden global learner persona (summary, strengths, weaknesses); `preferences.tagFeedback`
   remembers the user's last 20 declined tag suggestions (see `src/lib/tags.ts`).
 - `Subject.memorySummary` + `Subject.memoryInsights` (`overcome`, `blindSpots`, `thinkingPatterns`, `teacherEmphasis`,
-  `nextFocus`): rebuilt by the **"🧠 Cập nhật nhận thức AI (Re-sync AI Memory)"** button on the subject page
+  `nextFocus`): rebuilt by the **"Update memory"** button on the subject page
   (`/api/ai/memory-sync`, light tier). The browser sends a capped, ref-labelled digest (`src/lib/brain.ts`: C1…/T1…
   refs, chronological attempts); the server builds the prompt (`src/lib/brain-prompt.ts`), merges with the previous
   memory, refines the persona and may return ≤2 tag suggestions in the same call. Users can inspect/edit both memories.
@@ -132,9 +178,8 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
 
 ### 4.5 Adaptive error tagging
 - Four base tags seeded **per subject** (`origin = BASE`, `scopeKey = subjectId`, deterministic id `baseTagId()`):
-  `concept_gap`, `misread`, `stuck_approach`, `calculation` ("Hổng kiến thức nền", "Đọc lướt / Bẫy đề",
-  "Tắc hướng biến đổi", "Sai tính toán / Thao tác"). Per-subject scope keeps an IELTS rename out of TSA Math.
-  The retired `careless` tag folds into `calculation` (IndexedDB v4 migration).
+  `concept_gap`, `misread`, `stuck_approach`, `calculation` ("Hổng kiến thức", "Đọc sai đề", "Bí hướng giải",
+  "Tính toán sai"). Per-subject scope keeps an IELTS rename out of TSA Math.
 - AI proposes **CREATE / RENAME** suggestions (`TagSuggestionFeedback`, ≤3 pending per subject; MERGE exists in the
   schema but is not generated). Accept → CREATE makes an `AI_ACCEPTED` tag linked to its evidence cards; RENAME pins the
   new name by clearing `i18nKey`. Decline → reason (`too_specific` | `not_my_intent` | `other: <text>`) is stored and
@@ -151,7 +196,7 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
 - Problem statements keep the source question's language; solutions/explanations use the AI output language
   (`languageMode: "source"` in `ai-prompt.ts`).
 - Every synthesized problem is `isExperimental = true` and MUST render `<ExperimentalBadge>` with
-  `t.synth.experimentalBadge` ("⚠️ Đề AI Thử Nghiệm (Có thể sai số) — Experimental AI Problem"). "Report / fix with AI"
+  `t.synth.experimentalBadge` ("Do AI tạo · Có thể có sai sót" / "AI-generated · May contain errors"). "Report / fix with AI"
   (`/api/ai/synthesize/fix`) re-verifies against the user's report and bumps `revision` when it corrects the problem.
   Users can also promote a problem to a real `MistakeCard`.
 
@@ -162,34 +207,40 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
 ```
 prisma/schema.prisma            # single source of truth for the data model
 prisma/migrations/              # SQL migrations (generated by `prisma migrate diff/dev`, committed)
-supabase/rls.sql                # optional defense-in-depth RLS for Supabase deployments
-src/app/                        # App Router routes (RSC by default; "use client" only where needed)
+src/app/                        # App Router: (auth)/ sign-in pages, (app)/(pages)/ padded pages, (app)/sources/[id] workspace, api/
+DESIGN_SYSTEM.md                # tokens, type, motion, layout and copy rules (read before UI work)
 src/components/ui/              # shadcn/ui primitives (generated — edit sparingly)
 src/components/                 # app components
 src/lib/fsrs.ts                 # FSRS-6 engine (pure, tested)
 src/lib/crypto.ts               # AES-256-GCM vault (server-only, tested)
-src/lib/env.ts                  # env + data-mode resolution
+src/lib/env.ts                  # env validation (database URLs, secrets)
 src/lib/db/prisma.ts            # lazy Prisma client singleton
 src/lib/constants.ts            # base tags, enums mirrored for the client, AI-language resolver
 src/lib/i18n/                   # GUI dictionaries (vi.ts is the source-of-truth shape)
 src/lib/utils.ts                # cn() etc.
-src/lib/repo/                   # Repository contract (types.ts) + IndexedDB implementation (local.ts) + demo seed
+src/lib/repo/                   # Repository contract (types.ts) + PostgreSQL implementation (prisma.ts)
+src/server/                     # server actions, zod schemas, session guards, admin queries, auth actions
+src/auth.ts, auth.config.ts, proxy.ts  # Auth.js config, edge-safe config, route gatekeeper
 src/lib/review.ts               # review queue + FSRS grading helpers (pure)
 src/lib/brain.ts, brain-prompt.ts  # Second Brain digest + memory-sync / tag-suggest prompt contracts (pure)
 src/lib/synth-prompt.ts, lab.ts # mutate / synthesize / fix prompt contracts; exam scope + source selection (pure)
 src/lib/tags.ts                 # tag display names, decline-feedback memory (pure)
+src/lib/problems.ts, vault.ts   # snip ordering, save rules, review status; vault filter/sort/group (pure)
+src/lib/motion.ts, color.ts     # spring presets; OKLCH → sRGB + WCAG contrast (pure, tested)
 src/lib/ai-jobs.ts              # server-only runners for the structured AI routes (prompt built server-side)
 src/lib/ai-client.ts            # browser → /api/ai/* with zod-validated responses
-src/components/crosshair-card.tsx  # the standard Evervault card surface
+src/components/crosshair-card.tsx  # <Surface>, the standard resting card
+src/components/app-shell.tsx    # collapsible sidebar shell
+src/components/sources/, vault/, problems/  # snipping workspace, Problem Vault, shared problem fields
 src/components/experimental-badge.tsx  # mandatory badge for AI-generated problems/variants
-tests/                          # vitest unit tests (+ local-repo.test.ts on fake-indexeddb, db.integration.test.ts opt-in)
+tests/                          # vitest unit tests (db.integration.test.ts runs only with TEST_DATABASE_URL)
 ```
 
 ## 6. Coding rules
 - TypeScript strict; no `any` (use `unknown` + zod). Shared enums come from Prisma-generated types on the server and
   mirrored string unions in `src/lib/constants.ts` for client code (keep them in sync).
 - Server-only modules (`crypto.ts`, Prisma, AI provider calls) import `"server-only"`.
-- All user-scoped queries filter by `userId` — no exceptions (also enforced by `supabase/rls.sql` in Supabase).
+- All user-scoped queries filter by `userId` — no exceptions (see "Data access & isolation").
 - Dates are stored UTC; FSRS day boundaries are computed in UTC unless a user timezone is passed.
 - AI responses that feed the DB must be requested as JSON and parsed with zod; never trust model output.
 - New AI features: put the prompt + schemas in a pure `*-prompt.ts`, run it from `ai-jobs.ts` via `aiJobHandler`

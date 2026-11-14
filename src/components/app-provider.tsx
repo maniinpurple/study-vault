@@ -1,24 +1,22 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
-import { STORAGE_KEYS, THEME_ATTRIBUTE, type Language, type TagDeclineReason, type ThemePreference } from "@/lib/constants";
+import { DEFAULT_THEME, STORAGE_KEYS, THEME_ATTRIBUTE, type Language, type TagDeclineReason, type ThemePreference } from "@/lib/constants";
 import type { MemorySyncResponse } from "@/lib/brain-prompt";
 import { getDictionary, LOCALE_TAG, type Dictionary } from "@/lib/i18n";
-import { seedDemoKeys } from "@/lib/repo/demo-keys";
-import { getRepository } from "@/lib/repo/local";
 import type {
-  AdaptiveTag, AiSynthesizedProblem, ApiKeyPatch, CardAttemptLog, CardPatch, ExamPrepSession, MistakeCard, NewApiKey, NewExamPrepSession, NewExamUpload, NewScannedCard,
-  NewSubject, NewSynthesizedProblem, NewTagSuggestion, PersonaPatch, Repository, ReviewInput, SaveScanResult, Subject, SubjectMemoryInput, SubjectPatch,
-  SynthesizedProblemPatch, TagSuggestionFeedback, Topic, User, UserApiKey, UserSnapshot,
+  AdaptiveTag, AiSynthesizedProblem, ApiKeyPatch, CardAttemptLog, CardPatch, ExamPrepSession, ExamUpload, MistakeCard, NewApiKey, NewExamPrepSession, NewExamUpload, NewProblem,
+  NewSubject, NewSynthesizedProblem, NewTagSuggestion, PersonaPatch, ReviewInput, Subject, SubjectMemoryInput, SubjectPatch, SynthesizedProblemPatch, TagSuggestionFeedback, Topic,
+  UploadPatch, UserApiKey, UserSnapshot,
 } from "@/lib/repo/types";
+import * as server from "@/server/actions";
+import type { ActionResult } from "@/server/result";
 
 type Status = "loading" | "ready" | "error";
 
 interface Actions {
-  switchAccount(id: string): Promise<void>;
-  createAccount(displayName: string): Promise<void>;
-  deleteAccount(id: string): Promise<void>;
   setTheme(theme: ThemePreference): Promise<void>;
   setUiLanguage(language: Language): Promise<void>;
   setDefaultAiLanguage(language: Language): Promise<void>;
@@ -32,17 +30,21 @@ interface Actions {
   createApiKey(input: NewApiKey): Promise<UserApiKey>;
   updateApiKey(id: string, patch: ApiKeyPatch): Promise<void>;
   deleteApiKey(id: string): Promise<void>;
-  saveScan(input: { upload: NewExamUpload; cards: NewScannedCard[] }): Promise<SaveScanResult>;
-  /** Stored image/file for a card or upload path (null when missing). */
+  createSource(input: NewExamUpload): Promise<ExamUpload>;
+  updateSource(id: string, patch: UploadPatch): Promise<void>;
+  deleteSource(id: string): Promise<void>;
+  /** Save a problem (snipped or standalone). Never needs an AI key. */
+  createProblem(input: NewProblem): Promise<MistakeCard>;
+  deleteProblem(id: string): Promise<void>;
+  /** A stored image/file by the path kept on a card or upload (null when missing). Served only to its owner. */
   getBlob(path: string): Promise<Blob | null>;
 
-  // Phase 4
   reviewCard(input: ReviewInput): Promise<{ card: MistakeCard; log: CardAttemptLog }>;
   updateCard(id: string, patch: CardPatch): Promise<void>;
   setCardTags(cardId: string, tagIds: string[]): Promise<void>;
   saveSubjectMemory(subjectId: string, input: SubjectMemoryInput): Promise<void>;
   updatePersona(patch: PersonaPatch): Promise<void>;
-  /** Persist one "Re-sync AI Memory" result: subject memory + persona + any tag suggestions, then reload once. */
+  /** Persist one "Update memory" result: subject memory + persona + any tag suggestions. */
   applyMemorySync(subjectId: string, result: MemorySyncResponse, meta: { sourceCardCount: number; sourceAttemptCount: number; suggestionMeta: Pick<NewTagSuggestion, "aiProvider" | "aiModel" | "outputLanguage"> }): Promise<TagSuggestionFeedback[]>;
   addTagSuggestions(subjectId: string, suggestions: NewTagSuggestion[]): Promise<TagSuggestionFeedback[]>;
   acceptTagSuggestion(id: string): Promise<AdaptiveTag>;
@@ -57,7 +59,6 @@ interface Actions {
 
 interface AppState {
   status: Status;
-  users: User[];
   snapshot: UserSnapshot | null;
   /** Time the snapshot was loaded; used by stats so render stays pure. */
   loadedAt: Date;
@@ -85,59 +86,81 @@ function writeStorage(key: string, value: string | null) {
   }
 }
 
+/** Error carrying the stable code a data action returned (`UNAUTHENTICATED`, `DUPLICATE_LABEL`, `NOT_FOUND`, …). */
+export class ActionError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+    this.name = "ActionError";
+  }
+}
+
+const fileUrl = (path: string) => `/api/files/${path.split("/").map(encodeURIComponent).join("/")}`;
+
+/**
+ * Holds the signed-in user's data. Everything comes from, and goes to, the server: reads and writes are server
+ * actions that scope every query by the session's user id, and each mutation returns the user's fresh snapshot.
+ */
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const repo = React.useMemo<Repository>(() => getRepository(), []);
   const [status, setStatus] = React.useState<Status>("loading");
-  const [users, setUsers] = React.useState<User[]>([]);
   const [snapshot, setSnapshot] = React.useState<UserSnapshot | null>(null);
   const [loadedAt, setLoadedAt] = React.useState(() => new Date(0));
   const [activeSubjectId, setActiveSubjectIdState] = React.useState<string | null>(null);
   const userIdRef = React.useRef<string | null>(null);
+  const router = useRouter();
+  /** Session gone (expired, or the account was removed): back to the sign-in page. */
+  const toLogin = React.useCallback(() => router.replace("/login"), [router]);
 
-  const load = React.useCallback(
-    async (preferredUserId?: string) => {
-      const all = await repo.listUsers();
-      const wanted = preferredUserId ?? userIdRef.current ?? readStorage(STORAGE_KEYS.activeAccount);
-      const user = all.find((u) => u.id === wanted) ?? all[0];
-      if (!user) throw new Error("No accounts");
-      const snap = await repo.loadSnapshot(user.id);
-      if (!snap) throw new Error("Snapshot missing");
-      userIdRef.current = user.id;
-      writeStorage(STORAGE_KEYS.activeAccount, user.id);
-      setUsers(all);
-      setSnapshot(snap);
-      setLoadedAt(new Date());
-      setActiveSubjectIdState((current) => {
-        const stored = current ?? readStorage(`${STORAGE_KEYS.activeSubject}:${user.id}`);
-        return snap.subjects.some((s) => s.id === stored && s.archivedAt === null) ? stored : null;
-      });
+  const apply = React.useCallback((snap: UserSnapshot) => {
+    userIdRef.current = snap.user.id;
+    setSnapshot(snap);
+    setLoadedAt(new Date());
+    setActiveSubjectIdState((current) => {
+      const stored = current ?? readStorage(`${STORAGE_KEYS.activeSubject}:${snap.user.id}`);
+      return snap.subjects.some((s) => s.id === stored && s.archivedAt === null) ? stored : null;
+    });
+  }, []);
+
+  /** Await a data action: apply the snapshot it returns, hand back its result, turn a failure into an `ActionError`. */
+  const call = React.useCallback(
+    async <T,>(pending: Promise<ActionResult<T>>): Promise<T> => {
+      const result = await pending;
+      if (!result.ok) {
+        if (result.code === "UNAUTHENTICATED") toLogin();
+        throw new ActionError(result.code);
+      }
+      apply(result.snapshot);
+      return result.data;
     },
-    [repo],
+    [apply, toLogin],
   );
 
   React.useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        await repo.init();
-        await seedDemoKeys(repo);
-        await load();
-        if (!cancelled) setStatus("ready");
-      } catch (err) {
-        console.error("[vaultlearn] failed to open the local vault", err);
+    server
+      .loadSnapshotAction()
+      .then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          if (result.code === "UNAUTHENTICATED") return toLogin();
+          return setStatus("error");
+        }
+        apply(result.snapshot);
+        setStatus("ready");
+      })
+      .catch((err) => {
+        console.error("[vaultlearn] failed to load your data", err);
         if (!cancelled) setStatus("error");
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
-  }, [repo, load]);
+  }, [apply, toLogin]);
 
   const user = snapshot?.user ?? null;
   const uiLanguage: Language = user?.uiLanguage ?? "VI";
-  const theme: ThemePreference = user?.theme ?? "OBSIDIAN";
+  const theme: ThemePreference = user?.theme ?? DEFAULT_THEME;
 
-  // Reflect per-account prefs on <html> and mirror them for the pre-hydration script (no flash on reload).
+  // Reflect the account's prefs on <html> and mirror them for the pre-hydration script (no flash on reload).
   React.useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = THEME_ATTRIBUTE[theme];
@@ -146,175 +169,132 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [theme, uiLanguage]);
 
   const actions = React.useMemo<Actions>(() => {
-    const uid = () => {
-      if (!userIdRef.current) throw new Error("No active account");
-      return userIdRef.current;
+    const rememberSubject = (id: string | null) => {
+      if (userIdRef.current) writeStorage(`${STORAGE_KEYS.activeSubject}:${userIdRef.current}`, id);
     };
     return {
-      async switchAccount(id) {
-        setActiveSubjectIdState(null);
-        await load(id);
-      },
-      async createAccount(displayName) {
-        const created = await repo.createUser({ displayName });
-        setActiveSubjectIdState(null);
-        await load(created.id);
-      },
-      async deleteAccount(id) {
-        const all = await repo.listUsers();
-        if (all.length <= 1) throw new Error("LAST_ACCOUNT");
-        await repo.deleteUser(id);
-        userIdRef.current = null;
-        setActiveSubjectIdState(null);
-        await load();
-      },
       async setTheme(next) {
-        await repo.updateUser(uid(), { theme: next });
-        await load();
+        await call(server.updateProfileAction({ theme: next }));
       },
       async setUiLanguage(next) {
-        await repo.updateUser(uid(), { uiLanguage: next });
-        await load();
+        await call(server.updateProfileAction({ uiLanguage: next }));
       },
       async setDefaultAiLanguage(next) {
-        await repo.updateUser(uid(), { defaultAiOutputLanguage: next });
-        await load();
+        await call(server.updateProfileAction({ defaultAiOutputLanguage: next }));
       },
       setActiveSubject(id) {
         setActiveSubjectIdState(id);
-        writeStorage(`${STORAGE_KEYS.activeSubject}:${uid()}`, id);
+        rememberSubject(id);
       },
       async createSubject(input) {
-        const created = await repo.createSubject(uid(), input);
+        const created = await call(server.createSubjectAction(input));
         setActiveSubjectIdState(created.id);
-        writeStorage(`${STORAGE_KEYS.activeSubject}:${uid()}`, created.id);
-        await load();
+        rememberSubject(created.id);
         return created;
       },
       async updateSubject(id, patch) {
-        await repo.updateSubject(uid(), id, patch);
-        await load();
+        await call(server.updateSubjectAction(id, patch));
       },
       async deleteSubject(id) {
-        await repo.deleteSubject(uid(), id);
+        await call(server.deleteSubjectAction(id));
         setActiveSubjectIdState((current) => (current === id ? null : current));
-        writeStorage(`${STORAGE_KEYS.activeSubject}:${uid()}`, null);
-        await load();
+        rememberSubject(null);
       },
-      async createTopic(input) {
-        const created = await repo.createTopic(uid(), input);
-        await load();
-        return created;
-      },
+      createTopic: (input) => call(server.createTopicAction(input)),
       async renameTopic(id, name) {
-        await repo.updateTopic(uid(), id, { name });
-        await load();
+        await call(server.renameTopicAction(id, name));
       },
       async deleteTopic(id) {
-        await repo.deleteTopic(uid(), id);
-        await load();
+        await call(server.deleteTopicAction(id));
       },
-      async createApiKey(input) {
-        const created = await repo.createApiKey(uid(), input);
-        await load();
-        return created;
-      },
+      createApiKey: (input) => call(server.createApiKeyAction(input)),
       async updateApiKey(id, patch) {
-        await repo.updateApiKey(uid(), id, patch);
-        await load();
+        await call(server.updateApiKeyAction(id, patch));
       },
       async deleteApiKey(id) {
-        await repo.deleteApiKey(uid(), id);
-        await load();
+        await call(server.deleteApiKeyAction(id));
       },
-      async saveScan(input) {
-        const result = await repo.saveScannedCards(uid(), input);
-        await load();
-        return result;
+
+      async createSource(input) {
+        const body = new FormData();
+        const { files, thumbnail, ...meta } = input;
+        body.set("meta", JSON.stringify({ title: meta.title, subjectId: meta.subjectId ?? null, fileKind: meta.fileKind, pageCount: meta.pageCount }));
+        files.forEach((file, i) => body.append("files", file, file instanceof File ? file.name : `page-${i + 1}`));
+        if (thumbnail) body.set("thumbnail", thumbnail, "thumbnail.jpg");
+        const res = await fetch("/api/sources", { method: "POST", body });
+        const reply = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
+        if (res.status === 401) toLogin();
+        if (!res.ok || !reply?.id) throw new ActionError(reply?.error ?? "INTERNAL");
+        const loaded = await server.loadSnapshotAction();
+        if (!loaded.ok) throw new ActionError(loaded.code);
+        apply(loaded.snapshot);
+        const created = loaded.snapshot.examUploads.find((u) => u.id === reply.id);
+        if (!created) throw new ActionError("NOT_FOUND");
+        return created;
       },
-      getBlob(path) {
-        return repo.getBlob(uid(), path);
+      async updateSource(id, patch) {
+        await call(server.updateSourceAction(id, patch));
       },
-      async reviewCard(input) {
-        const result = await repo.reviewCard(uid(), input);
-        await load();
-        return result;
+      async deleteSource(id) {
+        await call(server.deleteSourceAction(id));
       },
-      async updateCard(id, patch) {
-        await repo.updateCard(uid(), id, patch);
-        await load();
+      createProblem(input) {
+        const { originalCrop, diagramImage, ...meta } = input;
+        const body = new FormData();
+        body.set("meta", JSON.stringify(meta));
+        if (originalCrop) body.set("originalCrop", originalCrop, "original.jpg");
+        if (diagramImage) body.set("diagramImage", diagramImage, "diagram.png");
+        return call(server.createProblemAction(body));
       },
-      async setCardTags(cardId, tagIds) {
-        await repo.setCardTags(uid(), cardId, tagIds);
-        await load();
+      async deleteProblem(id) {
+        await call(server.deleteProblemAction(id));
       },
-      async saveSubjectMemory(subjectId, input) {
-        await repo.saveSubjectMemory(uid(), subjectId, input);
-        await load();
-      },
-      async updatePersona(patch) {
-        await repo.updatePersona(uid(), patch);
-        await load();
-      },
-      async applyMemorySync(subjectId, result, meta) {
-        const userId = uid();
+      async getBlob(path) {
         try {
-          await repo.saveSubjectMemory(userId, subjectId, { memorySummary: result.summary, memoryInsights: result.insights, source: "sync", memorySourceCardCount: meta.sourceCardCount });
-          await repo.updatePersona(userId, { ...result.persona, synced: true, lastSyncModel: result.model, sourceAttemptCount: meta.sourceAttemptCount });
-          return result.tagSuggestions.length > 0
-            ? await repo.addTagSuggestions(userId, subjectId, result.tagSuggestions.map((s) => ({ ...s, ...meta.suggestionMeta })))
-            : [];
-        } finally {
-          await load();
+          const res = await fetch(fileUrl(path));
+          return res.ok ? await res.blob() : null;
+        } catch {
+          return null;
         }
       },
-      async addTagSuggestions(subjectId, suggestions) {
-        const created = await repo.addTagSuggestions(uid(), subjectId, suggestions);
-        await load();
-        return created;
+
+      reviewCard: (input) => call(server.reviewCardAction(input)),
+      async updateCard(id, patch) {
+        await call(server.updateCardAction(id, patch));
       },
-      async acceptTagSuggestion(id) {
-        const tag = await repo.acceptTagSuggestion(uid(), id);
-        await load();
-        return tag;
+      async setCardTags(cardId, tagIds) {
+        await call(server.setCardTagsAction(cardId, tagIds));
       },
+      async saveSubjectMemory(subjectId, input) {
+        await call(server.saveSubjectMemoryAction(subjectId, input));
+      },
+      async updatePersona(patch) {
+        await call(server.updatePersonaAction(patch));
+      },
+      applyMemorySync: (subjectId, result, meta) => call(server.applyMemorySyncAction(subjectId, result, meta)),
+      addTagSuggestions: (subjectId, suggestions) => call(server.addTagSuggestionsAction(subjectId, suggestions)),
+      acceptTagSuggestion: (id) => call(server.acceptTagSuggestionAction(id)),
       async rejectTagSuggestion(id, reason, detail) {
-        await repo.rejectTagSuggestion(uid(), id, reason, detail);
-        await load();
+        await call(server.rejectTagSuggestionAction(id, reason, detail));
       },
-      async createExamPrepSession(input) {
-        const created = await repo.createExamPrepSession(uid(), input);
-        await load();
-        return created;
-      },
+      createExamPrepSession: (input) => call(server.createExamPrepSessionAction(input)),
       async deleteExamPrepSession(id) {
-        await repo.deleteExamPrepSession(uid(), id);
-        await load();
+        await call(server.deleteExamPrepSessionAction(id));
       },
-      async saveSynthesizedProblem(input) {
-        const created = await repo.saveSynthesizedProblem(uid(), input);
-        await load();
-        return created;
-      },
+      saveSynthesizedProblem: (input) => call(server.saveSynthesizedProblemAction(input)),
       async updateSynthesizedProblem(id, patch) {
-        await repo.updateSynthesizedProblem(uid(), id, patch);
-        await load();
+        await call(server.updateSynthesizedProblemAction(id, patch));
       },
-      async promoteSynthesizedProblem(id) {
-        const card = await repo.promoteSynthesizedProblem(uid(), id);
-        await load();
-        return card;
-      },
+      promoteSynthesizedProblem: (id) => call(server.promoteSynthesizedProblemAction(id)),
       async deleteSynthesizedProblem(id) {
-        await repo.deleteSynthesizedProblem(uid(), id);
-        await load();
+        await call(server.deleteSynthesizedProblemAction(id));
       },
     };
-  }, [repo, load]);
+  }, [apply, call, toLogin]);
 
   const value = React.useMemo<AppState>(
-    () => ({ status, users, snapshot, loadedAt, activeSubjectId, t: getDictionary(uiLanguage), locale: LOCALE_TAG[uiLanguage], actions }),
-    [status, users, snapshot, loadedAt, activeSubjectId, uiLanguage, actions],
+    () => ({ status, snapshot, loadedAt, activeSubjectId, t: getDictionary(uiLanguage), locale: LOCALE_TAG[uiLanguage], actions }),
+    [status, snapshot, loadedAt, activeSubjectId, uiLanguage, actions],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

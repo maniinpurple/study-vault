@@ -20,7 +20,7 @@ export function LanguageSwitcher() {
           title={t.language[language]}
           onClick={() => void actions.setUiLanguage(language)}
           className={cn(
-            "metric rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+            "tabular-nums rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
             language === current ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >

@@ -15,7 +15,7 @@ function Prose({ text }: { text: string }) {
       {tokenizeInline(text).map((token, i) => {
         if (token.type === "bold") return <strong key={i}>{token.value}</strong>;
         if (token.type === "italic") return <em key={i}>{token.value}</em>;
-        if (token.type === "code") return <code key={i} className="metric rounded bg-muted px-1 py-0.5 text-[0.85em]">{token.value}</code>;
+        if (token.type === "code") return <code key={i} className="tabular-nums rounded bg-muted px-1 py-0.5 text-[0.85em]">{token.value}</code>;
         return <React.Fragment key={i}>{token.value}</React.Fragment>;
       })}
     </>

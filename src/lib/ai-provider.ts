@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { buildPrompt, matchesLanguage, selectModel, TASK_TIER, type AiTask, type LanguageMode } from "@/lib/ai-prompt";
 import { decryptApiKey } from "@/lib/crypto";
-import { AI_PROVIDERS, type AiModelTier, type AiProvider, type Language } from "@/lib/constants";
+import { type AiModelTier, type AiProvider, type Language } from "@/lib/constants";
 
 /**
  * Unified BYOK adapter over Gemini, OpenAI, Anthropic and OpenAI-compatible endpoints.
@@ -12,15 +12,15 @@ import { AI_PROVIDERS, type AiModelTier, type AiProvider, type Language } from "
  * returned, or included in error messages.
  */
 
-export const credentialSchema = z.object({
-  userId: z.string().min(1).max(64),
-  provider: z.enum(AI_PROVIDERS),
-  encryptedKey: z.string().min(1).max(4096),
-  baseUrl: z.string().max(512).nullish(),
-  defaultModel: z.string().max(128).nullish(),
-  visionModel: z.string().max(128).nullish(),
-});
-export type AiCredential = z.infer<typeof credentialSchema>;
+/** A stored provider key, loaded from the database for the signed-in user. The ciphertext never leaves the server. */
+export interface AiCredential {
+  userId: string;
+  provider: AiProvider;
+  encryptedKey: string;
+  baseUrl?: string | null;
+  defaultModel?: string | null;
+  visionModel?: string | null;
+}
 
 export const imageSchema = z.object({
   mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),

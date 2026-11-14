@@ -5,34 +5,43 @@ import { getDictionary, resolveI18nKey } from "@/lib/i18n";
 import { en } from "@/lib/i18n/dictionaries/en";
 import { vi } from "@/lib/i18n/dictionaries/vi";
 
-function keyPaths(value: unknown, prefix = ""): string[] {
-  if (typeof value !== "object" || value === null) return [prefix];
-  return Object.entries(value).flatMap(([k, v]) => keyPaths(v, prefix ? `${prefix}.${k}` : k));
+function entries(value: unknown, prefix = ""): [string, string][] {
+  if (typeof value === "string") return [[prefix, value]];
+  return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) => entries(v, prefix ? `${prefix}.${k}` : k));
 }
+
+const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
+// A Vietnamese label carrying its English gloss in parentheses, e.g. "Tách câu hỏi (Extract Questions)".
+const ENGLISH_GLOSS = /\((?:[A-Z][a-z]+)(?: [A-Za-z]+)*\)/;
 
 describe("dictionaries", () => {
   it("vi and en expose exactly the same keys", () => {
-    expect(keyPaths(en).sort()).toEqual(keyPaths(vi).sort());
+    expect(entries(en).map(([k]) => k).sort()).toEqual(entries(vi).map(([k]) => k).sort());
   });
   it("have no empty strings", () => {
-    for (const dict of [vi, en]) for (const path of keyPaths(dict)) expect(resolveI18nKey(dict, path), path).toBeTruthy();
+    for (const dict of [vi, en]) for (const [path, text] of entries(dict)) expect(text, path).toBeTruthy();
   });
-  it("keeps the exact labels the scanner spec calls for in Vietnamese", () => {
-    expect(vi.scanner.panel.extract).toBe("Tách câu hỏi (Extract Questions)");
-    expect(vi.scanner.box.keepFigure).toBe("[+ Giữ hình vẽ/Đồ thị]");
-    expect(vi.scanner.drafts.viewOriginal).toBe("Xem ảnh gốc (View Original Crop)");
-    expect(vi.scanner.drafts.highYield).toBe("🔥 High-Yield / Cô nhấn mạnh (Hay ra thi)");
+  it("use the same placeholders in both languages", () => {
+    const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+    const english = new Map(entries(en));
+    for (const [path, text] of entries(vi)) expect(placeholders(english.get(path) ?? ""), path).toEqual(placeholders(text));
   });
-  it("keeps the exact Phase 4 labels in Vietnamese", () => {
-    expect(vi.review.mutate).toBe("⚡ AI Đổi số liệu (Mutate Numbers on the fly)");
-    expect(vi.review.reveal).toBe("Hiện lời giải & Ghi chú (Reveal)");
+  it("contain no emoji (DESIGN_SYSTEM.md §8.2)", () => {
+    for (const dict of [vi, en]) for (const [path, text] of entries(dict)) expect(EMOJI.test(text), `${path}: ${text}`).toBe(false);
+  });
+  it("keep one language per Vietnamese string, with no shouting", () => {
+    for (const [path, text] of entries(vi)) {
+      expect(ENGLISH_GLOSS.test(text), `${path}: ${text}`).toBe(false);
+      expect(text.includes("!"), `${path}: ${text}`).toBe(false);
+    }
+  });
+  it("use the glossary terms", () => {
+    expect(vi.review.ratings).toEqual({ AGAIN: "Quên", HARD: "Khó", GOOD: "Nhớ", EASY: "Dễ" });
+    expect(en.review.ratings).toEqual({ AGAIN: "Again", HARD: "Hard", GOOD: "Good", EASY: "Easy" });
     expect(vi.review.attemptNo).toBe("Lần {n}");
-    expect(Object.values(vi.review.ratings)).toEqual(["Quên (Again)", "Khó (Hard)", "Nhớ (Good)", "Phản xạ nhanh (Easy)"]);
-    expect(vi.brain.resync).toBe("🧠 Cập nhật nhận thức AI (Re-sync AI Memory)");
-    expect(vi.adaptive.accept).toBe("Chấp nhận (Accept)");
-    expect(vi.adaptive.decline).toBe("Không cần (Decline)");
-    expect(Object.values(vi.adaptive.reasons)).toEqual(["Quá chi tiết", "Không đúng ý tôi", "Lý do khác..."]);
-    expect(vi.synth.experimentalBadge).toBe("⚠️ Đề AI Thử Nghiệm (Có thể sai số) — Experimental AI Problem");
+    expect(vi.nav.vault).toBe("Kho câu hỏi");
+    expect(vi.synth.experimentalBadge).toBe("Do AI tạo · Có thể có sai sót");
+    expect(en.synth.experimentalBadge).toBe("AI-generated · May contain errors");
   });
 });
 

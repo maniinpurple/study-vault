@@ -10,7 +10,8 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Pooled (pgBouncer) URL is used by the app; migrations need a direct connection on Supabase.
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    // Migrations need a direct (non-pooled) connection: DIRECT_URL when set, otherwise DATABASE_URL.
+    // The app itself prefers DATABASE_URL_POOLED (see src/lib/env.ts).
+    url: process.env["DIRECT_URL"] || process.env["DATABASE_URL"],
   },
 });

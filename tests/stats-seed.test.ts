@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDemoSeed } from "@/lib/repo/seed";
+import { buildDemoSeed } from "./helpers/sample-data";
 import { activityByDay, computeRetention, countDueToday, reviewStreak, startOfDay, subjectOverviews, timezoneOffsetMinutes } from "@/lib/stats";
 import { en } from "@/lib/i18n/dictionaries/en";
 import { vi } from "@/lib/i18n/dictionaries/vi";

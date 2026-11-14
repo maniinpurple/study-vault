@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the scanner session: which API key to use, draft-card rules, and a small concurrency utility.
+ * Pure helpers for working with sources: which API key reads images, topic grouping, and a small concurrency utility.
  */
 import { aiLanguageFor, pickAiKey } from "@/lib/ai-keys";
 import type { Topic } from "@/lib/repo/types";
@@ -9,24 +9,6 @@ export const pickOcrKey = pickAiKey;
 
 /** Language for AI output on a scan: Subject → API key → account default (CLAUDE.md §3). */
 export const scanAiLanguage = aiLanguageFor;
-
-export interface DraftValidityInput {
-  questionLatex: string;
-  subjectId: string | null;
-}
-
-/** The only hard requirements for saving: some question text and a subject. Every note field is optional. */
-export function draftSaveProblem(draft: DraftValidityInput): "EMPTY_QUESTION" | "NO_SUBJECT" | null {
-  if (!draft.questionLatex.trim()) return "EMPTY_QUESTION";
-  if (!draft.subjectId) return "NO_SUBJECT";
-  return null;
-}
-
-/** Default card title, e.g. "Midterm · p.3 · Q2". */
-export function defaultCardTitle(uploadTitle: string, page: number, questionNumber: number, pageCount: number | null): string {
-  const base = uploadTitle.trim().replace(/\.(pdf|png|jpe?g|webp|heic|heif)$/i, "");
-  return [base, pageCount && pageCount > 1 ? `p.${page}` : null, `Q${questionNumber}`].filter(Boolean).join(" · ");
-}
 
 /** Topics of a subject grouped under their chapters, for a `<select>` with `<optgroup>`s. */
 export function groupTopics(topics: readonly Topic[], subjectId: string | null): { chapter: Topic; children: Topic[] }[] {

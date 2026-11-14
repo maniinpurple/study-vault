@@ -1,10 +1,12 @@
-// VaultLearn — PostgreSQL data model (Supabase-compatible).
+// VaultLearn — PostgreSQL data model.
 //
 // Conventions
 // - Models/fields are PascalCase/camelCase in TypeScript; tables/columns are snake_case in SQL (@@map / @map).
-// - All primary keys are UUIDs (v7 = time-ordered). `User.id` equals Supabase `auth.users.id` when using Supabase Auth.
-// - Every user-owned row carries `user_id` (denormalised where needed) so queries and RLS can scope by owner cheaply.
-// - IndexedDB (local mode) object stores mirror these model + field names 1:1.
+// - All primary keys are UUIDs (v7 = time-ordered).
+// - DATA ISOLATION: every user-owned row carries `user_id` (denormalised where needed) with a cascading relation to
+//   `users`. The repository (src/lib/repo/prisma.ts) scopes every query by the signed-in user's id.
+// - Authentication is Auth.js (NextAuth v5) with the Credentials provider and JWT sessions; `accounts` / `sessions`
+//   follow the standard Auth.js shape so OAuth providers or database sessions can be added without a redesign.
 
 generator client {
   provider = "prisma-client"
@@ -35,10 +37,18 @@ enum ThemePreference {
 }
 
 enum AuthProvider {
-  SUPABASE
+  SUPABASE // legacy value, unused
   CREDENTIALS
 
   @@map("auth_provider")
+}
+
+/// Authorisation role. ADMIN unlocks /admin (system-wide metrics); it never widens access to other users' study data.
+enum UserRole {
+  USER
+  ADMIN
+
+  @@map("user_role")
 }
 
 enum AiProvider {
@@ -154,13 +164,15 @@ model User {
   email                   String          @unique
   displayName             String?         @map("display_name")
   avatarUrl               String?         @map("avatar_url")
-  authProvider            AuthProvider    @default(SUPABASE) @map("auth_provider")
-  /// Only for self-hosted CREDENTIALS auth (argon2/scrypt hash). Null when Supabase manages auth.
+  emailVerified           DateTime?       @map("email_verified")
+  role                    UserRole        @default(USER)
+  authProvider            AuthProvider    @default(CREDENTIALS) @map("auth_provider")
+  /// bcrypt hash of the password (Credentials sign-in). Never selected into anything sent to the browser.
   passwordHash            String?         @map("password_hash")
   uiLanguage              Language        @default(VI) @map("ui_language")
   /// Fallback AI output language when neither the subject nor the API key specifies one.
   defaultAiOutputLanguage Language        @default(VI) @map("default_ai_output_language")
-  theme                   ThemePreference @default(OBSIDIAN)
+  theme                   ThemePreference @default(LIGHT)
   timezone                String          @default("Asia/Ho_Chi_Minh")
 
   // FSRS preferences
@@ -177,6 +189,9 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
+  accounts            Account[]
+  sessions            Session[]
+  files               StoredFile[]
   apiKeys             UserApiKey[]
   persona             UserAiPersona?
   subjects            Subject[]
@@ -190,6 +205,58 @@ model User {
   synthesizedProblems AiSynthesizedProblem[]
 
   @@map("users")
+}
+
+/// OAuth / external account linked to a user (standard Auth.js shape). Unused by Credentials sign-in.
+model Account {
+  id                String  @id @default(uuid(7)) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+/// Database session (standard Auth.js shape). Credentials sign-in uses signed JWT cookies, so this stays empty
+/// unless the session strategy is switched to "database".
+model Session {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Binary object owned by a user: exam files, page thumbnails and question crops, addressed by `path`
+/// (`u/<userId>/…`). Served only to its owner through /api/files.
+model StoredFile {
+  path      String   @id
+  userId    String   @map("user_id") @db.Uuid
+  mimeType  String   @map("mime_type")
+  sizeBytes Int      @map("size_bytes")
+  data      Bytes
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("stored_files")
 }
 
 /// BYOK API key. `encryptedKey` is an AES-256-GCM envelope produced by src/lib/crypto.ts — never plaintext.
@@ -336,7 +403,7 @@ model ExamUpload {
   sourceLabel      String?      @map("source_label")
   fileKind         FileKind     @map("file_kind")
   mimeType         String       @map("mime_type")
-  /// Supabase Storage bucket (remote) — null in local mode where the blob lives in IndexedDB.
+  /// External object-storage bucket. Null while files live in `stored_files`.
   storageBucket    String?      @map("storage_bucket")
   storagePath      String       @map("storage_path")
   /// IMAGE uploads: one storage path per page (phone photos shot as a multi-page exam), in page order; `storagePath`

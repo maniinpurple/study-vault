@@ -13,7 +13,7 @@ export function ExperimentalBadge({ label, className }: { label: string; classNa
       )}
     >
       <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
-      <span>{label.replace(/^⚠️\s*/, "")}</span>
+      <span>{label}</span>
     </span>
   );
 }

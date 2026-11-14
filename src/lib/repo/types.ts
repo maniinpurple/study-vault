@@ -1,10 +1,11 @@
 /**
- * Entity shapes + repository contract. Field names mirror prisma/schema.prisma 1:1 (Dates are real `Date`s),
- * so IndexedDB rows can be exported to Postgres later. UI code depends on `Repository`, never on IndexedDB/Prisma.
+ * Entity shapes as the app sees them + the repository contract. Field names mirror prisma/schema.prisma (Dates are
+ * real `Date`s); secrets (`passwordHash`, encrypted API keys) are deliberately absent. The contract is implemented
+ * by `PrismaRepository` on the server; the browser reaches it only through the server actions in `src/server`.
  */
 import type {
   AiProvider, ExamPrepStatus, FileKind, Language, OcrStatus, SuggestionStatus, SynthesisMode, TagAssigner, TagDeclineReason, TagOrigin, TagSuggestionKind,
-  ThemePreference,
+  ThemePreference, UserRole,
 } from "@/lib/constants";
 import type { CardState, RatingName } from "@/lib/fsrs";
 
@@ -12,6 +13,7 @@ export interface User {
   id: string;
   email: string;
   displayName: string | null;
+  role: UserRole;
   uiLanguage: Language;
   defaultAiOutputLanguage: Language;
   theme: ThemePreference;
@@ -28,9 +30,7 @@ export interface UserApiKey {
   userId: string;
   provider: AiProvider;
   label: string;
-  /** AES-256-GCM envelope produced server-side. Never plaintext. */
-  encryptedKey: string;
-  encryptionKeyId: string;
+  /** Last 4 characters of the key. The key itself (stored encrypted) never leaves the server. */
   keyHint: string;
   baseUrl: string | null;
   defaultModel: string | null;
@@ -113,7 +113,7 @@ export interface ExamUpload {
   sourceLabel: string | null;
   fileKind: FileKind;
   mimeType: string;
-  /** Always null in local mode (the blob lives in IndexedDB). */
+  /** External object-storage bucket; null while files live in `stored_files`. */
   storageBucket: string | null;
   storagePath: string;
   /** IMAGE uploads: one path per page in page order (`storagePath` is the first); empty for PDFs. */
@@ -350,8 +350,11 @@ export interface UserSnapshot {
 
 export type NewSubject = Pick<Subject, "name"> & Partial<Pick<Subject, "description" | "color" | "icon" | "aiOutputLanguage" | "examDate" | "preferredApiKeyId">>;
 export type SubjectPatch = Partial<Pick<Subject, "name" | "description" | "color" | "icon" | "aiOutputLanguage" | "examDate" | "preferredApiKeyId" | "archivedAt">>;
-export type NewApiKey = Pick<UserApiKey, "provider" | "label" | "encryptedKey" | "encryptionKeyId" | "keyHint"> &
-  Partial<Pick<UserApiKey, "baseUrl" | "defaultModel" | "visionModel" | "aiOutputLanguage" | "isDefault">>;
+export type NewApiKey = Pick<UserApiKey, "provider" | "label"> &
+  Partial<Pick<UserApiKey, "baseUrl" | "defaultModel" | "visionModel" | "aiOutputLanguage" | "isDefault">> & {
+    /** Plaintext provider key. Sent once, encrypted on the server (AES-256-GCM), never stored or returned in the clear. */
+    apiKey: string;
+  };
 export type ApiKeyPatch = Partial<
   Pick<UserApiKey, "label" | "baseUrl" | "defaultModel" | "visionModel" | "aiOutputLanguage" | "isDefault" | "isActive" | "lastUsedAt" | "lastValidatedAt" | "lastErrorMessage">
 >;
@@ -369,26 +372,33 @@ export interface NewExamUpload {
   sha256: string;
   /** The exam's file(s) in page order: exactly one for a PDF, one per page for photos. */
   files: Blob[];
+  /** Small JPEG of page 1 for the Sources library (stored at `uploadThumbnailPath`). */
+  thumbnail?: Blob | null;
 }
 
-export interface NewScannedCard {
+export type UploadPatch = Partial<Pick<ExamUpload, "title" | "sourceLabel" | "subjectId">>;
+
+/** A problem to save: snipped from a source (`examUploadId` + `cropBox`) or added on its own. Needs text or an image. */
+export interface NewProblem {
   subjectId: string;
   topicId?: string | null;
+  examUploadId?: string | null;
   title?: string | null;
+  /** Markdown + LaTeX. May be empty when `originalCrop` carries the question as an image. */
   questionLatex: string;
   ahaNote?: string | null;
   /** Correct answer / worked solution (Markdown + KaTeX), stored as `solutionLatex`. */
   solutionLatex?: string | null;
   /** Teacher meta-note. */
   highYieldNote?: string | null;
-  isHighYield: boolean;
-  tagIds: string[];
-  sourcePage: number;
-  cropBox: CropBox;
+  isHighYield?: boolean;
+  tagIds?: string[];
+  sourcePage?: number | null;
+  cropBox?: CropBox | null;
   figureBox?: CropBox | null;
   originalCrop?: Blob | null;
   diagramImage?: Blob | null;
-  ocrStatus: OcrStatus;
+  ocrStatus?: OcrStatus;
   ocrModel?: string | null;
   ocrConfidence?: number | null;
   ocrRawText?: string | null;
@@ -403,7 +413,9 @@ export interface ReviewInput {
   timeSpentMs?: number | null;
 }
 
-export type CardPatch = Partial<Pick<MistakeCard, "solutionLatex" | "ahaNote" | "highYieldNote" | "isHighYield" | "topicId" | "isSuspended">>;
+export type CardPatch = Partial<
+  Pick<MistakeCard, "title" | "questionLatex" | "solutionLatex" | "ahaNote" | "highYieldNote" | "isHighYield" | "topicId" | "isSuspended" | "ocrStatus" | "ocrModel" | "ocrConfidence" | "ocrRawText">
+>;
 
 export interface SubjectMemoryInput {
   memorySummary: string;
@@ -460,24 +472,33 @@ export type SynthesizedProblemPatch = Partial<
   revised?: boolean;
 };
 
-export interface SaveScanResult {
-  upload: ExamUpload;
-  cards: MistakeCard[];
+/** A stored file as the server returns it. */
+export interface StoredBlob {
+  data: Uint8Array;
+  mimeType: string;
 }
 
-/** Every method is scoped by `userId` (the local account id) — no cross-account reads. */
+/** Decrypt-ready provider credential for one of the user's API keys (server-only use). */
+export interface ApiKeyCredential {
+  userId: string;
+  provider: AiProvider;
+  encryptedKey: string;
+  baseUrl: string | null;
+  defaultModel: string | null;
+  visionModel: string | null;
+}
+
+/**
+ * Data access contract. Every method takes the signed-in user's id first and touches only that user's rows:
+ * each query carries `userId` in its `where`, so one user can never read or change another's data.
+ */
 export interface Repository {
-  /** Seeds demo accounts on the very first run. Idempotent. */
-  init(): Promise<void>;
-  listUsers(): Promise<User[]>;
-  createUser(input: { displayName: string; email?: string }): Promise<User>;
-  updateUser(userId: string, patch: UserPatch): Promise<User>;
-  deleteUser(userId: string): Promise<void>;
   loadSnapshot(userId: string): Promise<UserSnapshot | null>;
+  updateUser(userId: string, patch: UserPatch): Promise<User>;
 
   createSubject(userId: string, input: NewSubject): Promise<Subject>;
   updateSubject(userId: string, id: string, patch: SubjectPatch): Promise<Subject>;
-  /** Deletes the subject and (cascading) its topics, cards and attempt logs. */
+  /** Deletes the subject and (cascading) its topics, cards, attempt logs, tags and generated problems. */
   deleteSubject(userId: string, id: string): Promise<void>;
 
   createTopic(userId: string, input: { subjectId: string; name: string; parentId?: string | null }): Promise<Topic>;
@@ -485,19 +506,25 @@ export interface Repository {
   /** Deletes the topic and its descendants; cards keep existing with `topicId = null`. */
   deleteTopic(userId: string, id: string): Promise<void>;
 
+  /** Encrypts the plaintext key and stores only the ciphertext + a 4-character hint. */
   createApiKey(userId: string, input: NewApiKey): Promise<UserApiKey>;
   updateApiKey(userId: string, id: string, patch: ApiKeyPatch): Promise<UserApiKey>;
   deleteApiKey(userId: string, id: string): Promise<void>;
+  /** The stored ciphertext of one of the user's active keys, for server-side AI calls. Null when it is not theirs. */
+  getApiKeyCredential(userId: string, id: string): Promise<ApiKeyCredential | null>;
 
-  /**
-   * Atomically stores (or reuses, by sha256) the exam file and creates one NEW-state MistakeCard per entry,
-   * together with its crop blobs and tag links. Flags each affected subject's memory as stale.
-   */
-  saveScannedCards(userId: string, input: { upload: NewExamUpload; cards: NewScannedCard[] }): Promise<SaveScanResult>;
-  /** Fetch a stored image/file by the path kept on a card or upload. Null when it does not exist. */
-  getBlob(userId: string, path: string): Promise<Blob | null>;
+  /** Store an exam file as a source. An upload with the same sha256 is reused, not duplicated. */
+  createUpload(userId: string, input: NewExamUpload): Promise<ExamUpload>;
+  updateUpload(userId: string, id: string, patch: UploadPatch): Promise<ExamUpload>;
+  /** Deletes the source and its files; problems snipped from it are kept (their `examUploadId` becomes null). */
+  deleteUpload(userId: string, id: string): Promise<void>;
+  /** Create one NEW-state MistakeCard with its crop blobs and tag links. Never needs an AI key. Flags the subject memory stale. */
+  createCard(userId: string, input: NewProblem): Promise<MistakeCard>;
+  /** Deletes the card with its attempt logs, tag links, stored crops and synthesis source links. */
+  deleteCard(userId: string, id: string): Promise<void>;
+  /** A stored image/file by the path kept on a card or upload. Null when it does not exist or belongs to someone else. */
+  getBlob(userId: string, path: string): Promise<StoredBlob | null>;
 
-  // ── Phase 4 ──
   /** FSRS-grade a card (zero AI): updates scheduling, appends the next sequential `CardAttemptLog`, marks subject memory stale. */
   reviewCard(userId: string, input: ReviewInput): Promise<{ card: MistakeCard; log: CardAttemptLog }>;
   updateCard(userId: string, id: string, patch: CardPatch): Promise<MistakeCard>;
@@ -520,4 +547,15 @@ export interface Repository {
   /** Turn an AI problem into a real NEW-state MistakeCard in the same subject. */
   promoteSynthesizedProblem(userId: string, id: string): Promise<MistakeCard>;
   deleteSynthesizedProblem(userId: string, id: string): Promise<void>;
+}
+
+/** An expected, user-facing failure of a repository call. `code` is what the browser receives. */
+export class RepoError extends Error {
+  constructor(
+    readonly code: string,
+    message: string = code,
+  ) {
+    super(message);
+    this.name = "RepoError";
+  }
 }

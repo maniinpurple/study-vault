@@ -1,7 +1,7 @@
 "use client";
 
 import { MotionConfig } from "framer-motion";
-import { Brain, FlaskConical, Layers, Loader2, Save, Shuffle, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { Loader2, Save, Trash2 } from "lucide-react";
 import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
@@ -9,7 +9,6 @@ import { CrosshairCard } from "@/components/crosshair-card";
 import { ExperimentalBadge } from "@/components/experimental-badge";
 import { ProblemCard } from "@/components/lab/problem-card";
 import { MathText } from "@/components/math-text";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { aiErrorMessage, useSubjectAi } from "@/components/use-subject-ai";
@@ -31,19 +30,15 @@ export function LabStudio() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="space-y-6">
-        <header className="space-y-1">
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <FlaskConical className="size-6 text-primary" aria-hidden />
-            <span className="text-glow-gradient">{t.lab.title}</span>
-          </h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">{t.lab.subtitle}</p>
+        <header className="space-y-1.5">
+          <h1 className="text-display">{t.lab.title}</h1>
+          <p className="max-w-xl text-muted-foreground">{t.lab.subtitle}</p>
         </header>
         {subject ? (
           // Keyed by subject: scope, mode and picks reset when the subject changes.
           <LabWorkspace key={subject.id} subject={subject} subjects={subjects} onSubject={(id) => actions.setActiveSubject(id)} />
         ) : (
           <CrosshairCard className="space-y-2 py-12 text-center">
-            <Layers className="mx-auto size-7 text-muted-foreground" aria-hidden />
             <p className="text-sm font-medium">{t.lab.noSubjects}</p>
           </CrosshairCard>
         )}
@@ -79,7 +74,10 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
   const chapters = topics.filter((tp) => tp.parentId === null);
   const tags = tagsForSubject(snapshot.tags, subject.id);
   const presets = snapshot.examPrepSessions.filter((p) => p.subjectId === subject.id);
-  const scoped = cardsInScope(snapshot.cards, { subjectId: subject.id, topicIds, tagIds, highYieldOnly }, snapshot.topics, snapshot.cardTags);
+  // The synthesizer reads question text, so image-only problems cannot be sources until they are converted.
+  const inScopeAll = cardsInScope(snapshot.cards, { subjectId: subject.id, topicIds, tagIds, highYieldOnly }, snapshot.topics, snapshot.cardTags);
+  const scoped = inScopeAll.filter((c) => c.questionLatex.trim().length > 0);
+  const imageOnly = inScopeAll.length - scoped.length;
   const ranked = rankWeakCards(scoped, snapshot.logs, loadedAt);
   const target = mode === "CLONE" ? 1 : mixCount;
   const autoPick = mode === "CLONE" ? ranked.slice(0, 1).map((r) => r.card.id) : pickMixSources(ranked, mixCount).map((c) => c.id);
@@ -178,7 +176,7 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
       <div className="min-w-0 space-y-6">
         <CrosshairCard className="space-y-5">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t.lab.scope}</h2>
+            <h2 className="text-heading">{t.lab.scope}</h2>
             <p className="text-xs text-muted-foreground">{t.lab.scopeHint}</p>
           </div>
 
@@ -270,17 +268,18 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
             onClick={() => changeScope(() => setHighYieldOnly((v) => !v))}
             className={cn(
               "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-              highYieldOnly ? "border-warning/60 bg-warning/10" : "border-border hover:bg-muted/50",
+              highYieldOnly ? "border-transparent bg-mark-soft text-mark-foreground" : "border-border hover:bg-muted",
             )}
           >
             <span>{t.lab.highYieldOnly}</span>
-            <span aria-hidden className={cn("relative h-5 w-9 shrink-0 rounded-full transition-colors", highYieldOnly ? "bg-warning" : "bg-muted")}>
+            <span aria-hidden className={cn("relative h-5 w-9 shrink-0 rounded-full transition-colors", highYieldOnly ? "bg-mark-foreground" : "bg-secondary")}>
               <span className={cn("absolute top-0.5 size-4 rounded-full bg-white shadow transition-[left]", highYieldOnly ? "left-[1.1rem]" : "left-0.5")} />
             </span>
           </button>
 
           <div className="space-y-3 border-t border-border pt-4">
-            <Badge variant={scoped.length > 0 ? "default" : "destructive"} className="metric">{format(t.lab.inScope, { n: scoped.length })}</Badge>
+            <p className="text-sm font-medium tabular-nums">{format(t.lab.inScope, { n: scoped.length })}</p>
+            {imageOnly > 0 && <p className="text-caption text-muted-foreground">{format(t.lab.imageOnly, { n: imageOnly })}</p>}
             <form onSubmit={savePreset} className="flex gap-1.5">
               <Input value={presetName} onChange={(e) => setPresetName(e.target.value)} placeholder={t.lab.presetName} aria-label={t.lab.presetName} maxLength={80} className="h-8 min-w-0 flex-1" />
               <Button type="submit" variant="outline" size="default" disabled={!presetName.trim()}>
@@ -293,7 +292,7 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
 
         <CrosshairCard className="space-y-5">
           <div className="space-y-2" role="radiogroup" aria-label={t.lab.mode}>
-            <p className="text-sm font-semibold">{t.lab.mode}</p>
+            <p className="text-heading">{t.lab.mode}</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {(["CLONE", "MIX"] as const).map((m) => (
                 <button
@@ -311,7 +310,6 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
                   )}
                 >
                   <span className="flex items-center gap-1.5 text-sm font-medium">
-                    {m === "CLONE" ? <Wand2 className="size-4 text-primary" aria-hidden /> : <Shuffle className="size-4 text-primary" aria-hidden />}
                     {m === "CLONE" ? t.lab.modeA : t.lab.modeB}
                   </span>
                   <span className="block text-xs text-muted-foreground">{m === "CLONE" ? t.lab.modeAHint : t.lab.modeBHint}</span>
@@ -323,7 +321,7 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
                 <span className="text-muted-foreground">{t.lab.mixCount}</span>
                 {[2, SYNTHESIS_MIX_MAX_SOURCES].map((n) => (
                   <button key={n} type="button" aria-pressed={mixCount === n} onClick={() => { setMixCount(n); setPicked(null); }} className={chip(mixCount === n)}>
-                    <span className="metric">{n}</span>
+                    <span className="tabular-nums">{n}</span>
                   </button>
                 ))}
               </div>
@@ -333,13 +331,12 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold">{t.lab.sources}</p>
+                <p className="text-heading">{t.lab.sources}</p>
                 <p className="text-xs text-muted-foreground">{format(t.lab.sourcesHint, { n: target })}</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="metric text-xs text-muted-foreground">{format(t.lab.picked, { n: pickedIds.length, max: target })}</span>
+                <span className="tabular-nums text-xs text-muted-foreground">{format(t.lab.picked, { n: pickedIds.length, max: target })}</span>
                 <Button variant="ghost" size="xs" onClick={() => setPicked(null)} disabled={picked === null}>
-                  <Sparkles />
                   {t.lab.autoPick}
                 </Button>
               </div>
@@ -366,11 +363,11 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
                         </span>
                         <span className="min-w-0 flex-1 space-y-1">
                           <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                            {card.isHighYield && <span>🔥</span>}
+                            {card.isHighYield && <span className="font-medium text-mark-foreground">{t.review.highYield}</span>}
                             {topicPath(card.topicId, snapshot.topics) ?? card.title}
-                            <span className="metric ml-auto">{format(t.lab.weakness, { n: score.toFixed(1) })}</span>
+                            <span className="tabular-nums ml-auto">{format(t.lab.weakness, { n: score.toFixed(1) })}</span>
                           </span>
-                          <MathText text={card.questionLatex} className="line-clamp-2 text-xs" />
+                          <MathText text={card.questionLatex} className="line-clamp-2 text-[13px]" />
                         </span>
                       </button>
                     </li>
@@ -382,13 +379,12 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
 
           <div className="space-y-2 border-t border-border pt-4">
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <Brain className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
               {subject.memorySummary ? format(t.lab.memoryInjected, { v: subject.memoryVersion }) : t.lab.memoryMissing}
             </p>
             {!ai.key && <p className="text-xs text-destructive">{t.ai.noKey}</p>}
             <ExperimentalBadge label={t.synth.experimentalBadge} />
-            <Button size="lg" className="w-full bg-gradient-to-r from-glow-from to-glow-to text-white hover:opacity-90" onClick={() => void generate()} disabled={!canGenerate}>
-              {generating ? <Loader2 className="animate-spin" /> : <Sparkles />}
+            <Button size="lg" className="w-full" onClick={() => void generate()} disabled={!canGenerate}>
+              {generating ? <Loader2 className="animate-spin" /> : null}
               {generating ? t.lab.generating : t.lab.generate}
             </Button>
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -398,12 +394,11 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
 
       {/* ── Generated problems ────────────────────────────────────── */}
       <section aria-labelledby={`${id}-history`} className="min-w-0 space-y-4">
-        <h2 id={`${id}-history`} className="text-sm font-semibold">
-          {t.lab.history} <span className="metric font-normal text-muted-foreground">· {problems.length}</span>
+        <h2 id={`${id}-history`} className="text-heading">
+          {t.lab.history} <span className="tabular-nums font-normal text-muted-foreground">· {problems.length}</span>
         </h2>
         {problems.length === 0 ? (
           <CrosshairCard className="space-y-2 py-12 text-center">
-            <FlaskConical className="mx-auto size-7 text-muted-foreground" aria-hidden />
             <p className="text-sm text-muted-foreground">{t.lab.historyEmpty}</p>
           </CrosshairCard>
         ) : (

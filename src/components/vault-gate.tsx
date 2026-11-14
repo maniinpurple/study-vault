@@ -13,7 +13,7 @@ export function VaultGate({ children }: { children: React.ReactNode }) {
   const { status, t } = useApp();
   if (status !== "ready") {
     return (
-      <p role="status" className="metric py-24 text-center text-sm text-muted-foreground">
+      <p role="status" className="tabular-nums py-24 text-center text-sm text-muted-foreground">
         {t.app.loading}
       </p>
     );

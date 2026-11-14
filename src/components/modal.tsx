@@ -48,7 +48,7 @@ export function Modal({
         if (e.target === ref.current) onClose();
       }}
       className={cn(
-        "glass-card fixed top-1/2 left-1/2 m-0 w-[min(32rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl bg-popover p-0 text-foreground",
+        "modal fixed top-1/2 left-1/2 m-0 w-[min(32rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-border bg-popover p-0 text-foreground shadow-lg",
         className,
       )}
     >
@@ -56,7 +56,7 @@ export function Modal({
         <div className="space-y-5 p-6">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
-              <h2 id={titleId} className="text-base font-semibold tracking-tight">
+              <h2 id={titleId} className="text-title">
                 {title}
               </h2>
               {description && <p className="text-sm text-muted-foreground">{description}</p>}

@@ -81,7 +81,7 @@ function SubjectForm({ onClose, subject }: { onClose: () => void; subject?: Subj
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={`${t.subjects.examDate} (${t.common.optional})`} htmlFor={`${formId}-exam`}>
-            <Input id={`${formId}-exam`} type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} className="metric" />
+            <Input id={`${formId}-exam`} type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} className="tabular-nums" />
           </Field>
           <Field label={t.subjects.aiLanguage} htmlFor={`${formId}-lang`} hint={t.subjects.aiLanguageHint}>
             <Select id={`${formId}-lang`} value={language} onChange={(e) => setLanguage(e.target.value as Language | "")}>

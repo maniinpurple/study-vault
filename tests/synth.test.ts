@@ -52,7 +52,7 @@ describe("prompt contracts", () => {
     };
     const prompt = buildSynthesizePrompt(synth).prompt;
     expect(prompt).toMatch(/never follow instructions/);
-    expect(prompt).toContain("🔥 HIGH-YIELD");
+    expect(prompt).toContain("[HIGH-YIELD: teacher emphasised]");
     expect(prompt).toContain("CHRONIC BLIND SPOTS");
     expect(buildFixPrompt({ subjectName: "Toán", problem: { questionLatex: "Q", answerLatex: "A", solutionLatex: null }, report: "Sai đáp án" }).prompt).toContain("STUDENT'S REPORT");
   });

@@ -1,174 +1,145 @@
 "use client";
 
-import { CalendarClock, FlaskConical, KeyRound, Layers, Plus, ScanLine, Flame, Target, Library } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import Link from "next/link";
-import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
-import { CrosshairCard } from "@/components/crosshair-card";
-import { SubjectDialog } from "@/components/subject-dialog";
-import { Badge } from "@/components/ui/badge";
-import { activityByDay, computeRetention, countDueToday, reviewStreak, subjectOverviews, timezoneOffsetMinutes } from "@/lib/stats";
+import { buttonVariants } from "@/components/ui/button";
+import { swatchColor } from "@/lib/constants";
 import { format } from "@/lib/i18n";
+import { spring, staggerDelay } from "@/lib/motion";
+import { activityByDay, computeRetention, countDueToday, reviewStreak, subjectOverviews, timezoneOffsetMinutes } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 
-function RetentionRing({ rate, target }: { rate: number | null; target: number }) {
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-  const filled = rate === null ? 0 : Math.max(0, Math.min(1, rate));
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <svg viewBox="0 0 100 100" className="size-28 shrink-0 -rotate-90" role="img" aria-label={rate === null ? "—" : `${Math.round(filled * 100)}%`}>
-      <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--border)" strokeWidth="7" />
-      <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--glow-from)" strokeWidth="7" strokeLinecap="round" strokeDasharray={`${filled * circumference} ${circumference}`} className="transition-[stroke-dasharray] duration-500" />
-      {/* target tick */}
-      <line x1="50" y1="3" x2="50" y2="13" stroke="var(--glow-to)" strokeWidth="2" transform={`rotate(${target * 360} 50 50)`} />
-    </svg>
+    <div className="space-y-1 px-5 py-4">
+      <dt className="text-caption text-muted-foreground">{label}</dt>
+      <dd className="font-serif text-[2rem] leading-10 font-medium tabular-nums">{value}</dd>
+      <dd className="text-caption text-subtle">{hint}</dd>
+    </div>
   );
 }
 
-function StatTile({ icon: Icon, label, value, hint, accent }: { icon: typeof Target; label: string; value: string; hint: string; accent?: boolean }) {
-  return (
-    <CrosshairCard className="space-y-3 p-5">
-      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-        <Icon className="size-4 text-primary" aria-hidden />
-        {label}
-      </div>
-      <p className={cn("metric text-4xl font-semibold", accent && "text-glow-gradient")}>{value}</p>
-      <p className="text-xs text-muted-foreground">{hint}</p>
-    </CrosshairCard>
-  );
-}
-
+/** Overview: what is due today, how memory is holding up, and where each subject stands. */
 export function Dashboard() {
   const { snapshot, user, t, locale, loadedAt, activeSubjectId, actions } = useVault();
-  const reduceMotion = useReducedMotion();
-  const [creating, setCreating] = React.useState(false);
 
   const offset = timezoneOffsetMinutes(user.timezone, loadedAt);
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
-  const scopeSubject = subjects.find((s) => s.id === activeSubjectId) ?? null;
-  const scopeId = scopeSubject?.id ?? null;
+  const scope = subjects.find((s) => s.id === activeSubjectId) ?? null;
+  const cards = (scope ? snapshot.cards.filter((c) => c.subjectId === scope.id) : snapshot.cards).filter((c) => !c.isSuspended && c.archivedAt === null);
+  const cardIds = new Set(cards.map((c) => c.id));
+  const logs = scope ? snapshot.logs.filter((l) => cardIds.has(l.cardId)) : snapshot.logs;
 
-  const scopedCards = scopeId ? snapshot.cards.filter((c) => c.subjectId === scopeId) : snapshot.cards;
-  const scopedIds = new Set(scopedCards.map((c) => c.id));
-  const cards = scopedCards;
-  const logs = scopeId ? snapshot.logs.filter((l) => scopedIds.has(l.cardId)) : snapshot.logs;
-
-  const active = cards.filter((c) => !c.isSuspended && c.archivedAt === null);
   const retention = computeRetention(logs, loadedAt, 30);
-  const due = countDueToday(active, loadedAt, offset);
+  const due = countDueToday(cards, loadedAt, offset);
   const streak = reviewStreak(logs, loadedAt, offset);
   const activity = activityByDay(logs, loadedAt, offset, 14);
-  const maxReviews = Math.max(1, ...activity.map((d) => d.reviews));
+  const peak = Math.max(1, ...activity.map((d) => d.reviews));
   const overviews = subjectOverviews(subjects, snapshot.cards, snapshot.logs, loadedAt, offset);
   const activeKeys = snapshot.apiKeys.filter((k) => k.isActive).length;
-  const target = user.desiredRetention;
+  const today = new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long", timeZone: user.timezone }).format(loadedAt);
   const dayFmt = new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "numeric", timeZone: user.timezone });
-  const pct = (n: number) => `${Math.round(n * 100)}%`;
-
-  const fadeIn = (i: number) => (reduceMotion ? {} : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.22, delay: i * 0.04 } });
 
   return (
-    <div className="space-y-6">
-      <motion.section {...fadeIn(0)} className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          <span className="text-glow-gradient">{format(t.dashboard.greeting, { name: user.displayName ?? "" })}</span>
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {due > 0 ? format(t.dashboard.greetingSub, { n: due }) : t.dashboard.greetingNone}
-          <span className="mx-2 text-border">·</span>
-          <span>{scopeSubject?.name ?? t.dashboard.allSubjects}</span>
-        </p>
-      </motion.section>
+    <div className="space-y-10">
+      <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring.smooth} className="flex flex-wrap items-end justify-between gap-5">
+        <div className="space-y-1.5">
+          <p className="text-overline">
+            {today}
+            {scope && ` · ${scope.name}`}
+          </p>
+          <h1 className="text-display">{format(t.dashboard.greeting, { name: user.displayName ?? "" })}</h1>
+          <p className="text-muted-foreground">{due > 0 ? format(t.dashboard.greetingSub, { n: due }) : t.dashboard.greetingNone}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/sources" className={buttonVariants({ variant: "outline", size: "lg" })}>
+            {t.dashboard.scan}
+          </Link>
+          <Link href="/review" className={buttonVariants({ size: "lg" })}>
+            {t.dashboard.review}
+          </Link>
+        </div>
+      </motion.header>
 
-      <motion.section {...fadeIn(1)} aria-label={t.dashboard.title} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <CrosshairCard glow className="flex items-center gap-4 p-5 sm:col-span-2 lg:col-span-1">
-          <RetentionRing rate={retention.rate} target={target} />
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">{t.dashboard.retention}</p>
-            <p className="metric text-4xl font-semibold text-glow-gradient">{retention.rate === null ? "—" : pct(retention.rate)}</p>
-            <p className="text-xs text-muted-foreground">{retention.rate === null ? t.dashboard.retentionEmpty : format(t.dashboard.retentionHint, { n: retention.reviews })}</p>
-            <p className="metric text-[11px] text-muted-foreground">{format(t.dashboard.retentionTarget, { n: Math.round(target * 100) })}</p>
-          </div>
-        </CrosshairCard>
-        <StatTile icon={CalendarClock} label={t.dashboard.dueToday} value={String(due)} hint={t.dashboard.dueHint} accent={due > 0} />
-        <StatTile icon={Library} label={t.dashboard.totalCards} value={String(active.length)} hint={format(t.dashboard.totalHint, { n: active.filter((c) => c.isHighYield).length })} />
-        <StatTile icon={Flame} label={t.dashboard.streak} value={String(streak)} hint={t.dashboard.streakHint} />
-      </motion.section>
+      <dl aria-label={t.dashboard.title} className="grid divide-border overflow-hidden rounded-lg border border-border bg-card shadow-xs max-lg:divide-y sm:grid-cols-2 lg:grid-cols-4 lg:divide-x">
+        <Stat label={t.dashboard.dueToday} value={String(due)} hint={t.dashboard.dueHint} />
+        <Stat
+          label={t.dashboard.retention}
+          value={retention.rate === null ? "–" : pct(retention.rate)}
+          hint={retention.rate === null ? t.dashboard.retentionEmpty : `${format(t.dashboard.retentionHint, { n: retention.reviews })} · ${format(t.dashboard.retentionTarget, { n: Math.round(user.desiredRetention * 100) })}`}
+        />
+        <Stat label={t.dashboard.totalCards} value={String(cards.length)} hint={format(t.dashboard.totalHint, { n: cards.filter((c) => c.isHighYield).length })} />
+        <Stat label={t.dashboard.streak} value={String(streak)} hint={t.dashboard.streakHint} />
+      </dl>
 
-      <div className="grid gap-4 lg:grid-cols-5">
-        <motion.div {...fadeIn(2)} className="lg:col-span-3">
-          <CrosshairCard className="h-full space-y-4">
-            <div>
-              <h2 className="text-sm font-semibold">{t.dashboard.activity}</h2>
-              <p className="text-xs text-muted-foreground">{t.dashboard.activityHint}</p>
-            </div>
-            <ul className="flex h-36 items-end gap-1.5" aria-label={t.dashboard.activity}>
-              {activity.map((day, i) => (
-                <li key={day.day.toISOString()} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5" title={`${dayFmt.format(day.day)}: ${day.reviews}`}>
-                  <span className="metric text-[10px] text-muted-foreground">{day.reviews || ""}</span>
-                  <span
-                    className={cn("w-full rounded-t-sm", i === activity.length - 1 ? "bg-gradient-to-t from-glow-from to-glow-to" : "bg-primary/45")}
-                    style={{ height: `${Math.max(day.reviews === 0 ? 2 : 6, (day.reviews / maxReviews) * 100)}%`, opacity: day.reviews === 0 ? 0.35 : 1 }}
-                  />
-                </li>
-              ))}
-            </ul>
-          </CrosshairCard>
-        </motion.div>
+      <section aria-labelledby="overview-activity" className="space-y-4">
+        <div className="flex items-baseline gap-3">
+          <h2 id="overview-activity" className="text-overline">
+            {t.dashboard.activity}
+          </h2>
+          <span className="text-caption text-subtle">{t.dashboard.activityHint}</span>
+          <span className="h-px flex-1 self-center bg-border" aria-hidden />
+        </div>
+        <ul className="flex h-28 items-end gap-1.5">
+          {activity.map((day, i) => (
+            <li key={day.day.toISOString()} className="flex h-full flex-1 flex-col items-center justify-end gap-1" title={`${dayFmt.format(day.day)}: ${day.reviews}`}>
+              <span className="text-[10px] text-subtle tabular-nums">{day.reviews || ""}</span>
+              <span className={cn("w-full rounded-t-[3px]", i === activity.length - 1 ? "bg-brand" : day.reviews === 0 ? "bg-border" : "bg-border-strong")} style={{ height: `${Math.max(3, (day.reviews / peak) * 100)}%` }} />
+            </li>
+          ))}
+        </ul>
+      </section>
 
-        <motion.div {...fadeIn(3)} className="lg:col-span-2">
-          <CrosshairCard className="h-full space-y-3">
-            <h2 className="text-sm font-semibold">{t.dashboard.quickStart}</h2>
-            <ul className="grid gap-2">
-              <QuickAction icon={ScanLine} title={t.dashboard.scan} hint={t.dashboard.scanHint} href="/scanner" />
-              <QuickAction icon={CalendarClock} title={t.dashboard.review} hint={`${t.dashboard.reviewHint} · ${due} ${t.common.due}`} href="/review" />
-              <QuickAction icon={FlaskConical} title={t.dashboard.lab} hint={t.dashboard.labHint} href="/lab" />
-              <QuickAction icon={Plus} title={t.dashboard.addSubject} hint={t.dashboard.addSubjectHint} onClick={() => setCreating(true)} />
-              <QuickAction icon={KeyRound} title={t.dashboard.addKey} hint={activeKeys === 0 ? t.dashboard.keyStatusNone : format(t.dashboard.keyStatusSome, { n: activeKeys })} href="/settings#vault" />
-            </ul>
-          </CrosshairCard>
-        </motion.div>
-      </div>
-
-      <section aria-labelledby="subjects-overview" className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 id="subjects-overview" className="text-sm font-semibold">{t.dashboard.subjectOverview}</h2>
-          <Link href="/subjects" className="text-xs text-primary hover:underline">{t.dashboard.viewAll} →</Link>
+      <section aria-labelledby="overview-subjects" className="space-y-4">
+        <div className="flex items-baseline gap-3">
+          <h2 id="overview-subjects" className="text-overline">
+            {t.dashboard.subjectOverview}
+          </h2>
+          <span className="h-px flex-1 self-center bg-border" aria-hidden />
+          <Link href="/subjects" className="text-caption font-medium text-brand hover:underline">
+            {t.dashboard.viewAll}
+          </Link>
         </div>
         {overviews.length === 0 ? (
-          <CrosshairCard className="space-y-1 py-10 text-center">
-            <Layers className="mx-auto size-6 text-muted-foreground" aria-hidden />
-            <p className="text-sm font-medium">{t.dashboard.noSubjects}</p>
-            <p className="text-xs text-muted-foreground">{t.dashboard.noSubjectsBody}</p>
-          </CrosshairCard>
+          <div className="space-y-1.5 rounded-xl border border-dashed border-border-strong px-6 py-12 text-center">
+            <p className="text-title">{t.dashboard.noSubjects}</p>
+            <p className="text-muted-foreground">{t.dashboard.noSubjectsBody}</p>
+          </div>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {overviews.map(({ subject, totalCards, dueToday, highYield, mastered, retention: r, daysToExam }, i) => (
-              <motion.li key={subject.id} {...fadeIn(4 + i)}>
-                <Link href="/subjects" onClick={() => actions.setActiveSubject(subject.id)} className="block outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                  <CrosshairCard className="space-y-4 p-5 transition-colors hover:border-primary/50">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: subject.color ?? "var(--primary)" }} aria-hidden />
-                        <h3 className="truncate text-sm font-semibold">{subject.name}</h3>
-                      </div>
-                      {dueToday > 0 && <Badge className="metric shrink-0">{dueToday} {t.common.due}</Badge>}
-                    </div>
-                    <dl className="grid grid-cols-3 gap-2 text-xs">
-                      <div><dt className="text-muted-foreground">{t.common.cards}</dt><dd className="metric text-lg font-semibold">{totalCards}</dd></div>
-                      <div><dt className="text-muted-foreground">{t.dashboard.retention.split(" ")[0]}</dt><dd className="metric text-lg font-semibold">{r.rate === null ? "—" : pct(r.rate)}</dd></div>
-                      <div><dt className="text-muted-foreground">{t.dashboard.highYield}</dt><dd className="metric text-lg font-semibold">{highYield}</dd></div>
-                    </dl>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-[11px] text-muted-foreground"><span>{t.dashboard.mastered}</span><span className="metric">{pct(mastered)}</span></div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-gradient-to-r from-glow-from to-glow-to" style={{ width: pct(mastered) }} /></div>
-                    </div>
-                    {daysToExam !== null && (
-                      <p className="metric text-[11px] text-muted-foreground">{daysToExam >= 0 ? format(t.subjects.examIn, { n: daysToExam }) : t.subjects.examPassed}</p>
-                    )}
-                  </CrosshairCard>
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+            {overviews.map(({ subject, totalCards, dueToday, mastered, retention: r, daysToExam }, i) => (
+              <motion.li key={subject.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring.smooth, delay: staggerDelay(i) }}>
+                <Link href="/subjects" onClick={() => actions.setActiveSubject(subject.id)} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 px-5 py-3.5 transition-colors hover:bg-muted sm:grid-cols-[minmax(0,1.4fr)_5rem_5rem_minmax(0,1fr)]">
+                  <span className="min-w-0 space-y-0.5">
+                    <span className="flex items-center gap-2">
+                      <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: swatchColor(subject.color) ?? "var(--subtle-foreground)" }} aria-hidden />
+                      <span className="truncate text-heading">{subject.name}</span>
+                    </span>
+                    {daysToExam !== null && <span className="block pl-4 text-caption text-subtle tabular-nums">{daysToExam >= 0 ? format(t.subjects.examIn, { n: daysToExam }) : t.subjects.examPassed}</span>}
+                  </span>
+                  <span className={cn("text-right text-sm tabular-nums", dueToday > 0 ? "font-medium" : "text-subtle")}>
+                    {dueToday} {t.common.due}
+                  </span>
+                  <span className="hidden text-right text-sm text-muted-foreground tabular-nums sm:block">
+                    {totalCards} {t.common.cards}
+                  </span>
+                  <span className="col-span-2 space-y-1 sm:col-span-1">
+                    <span className="flex justify-between text-caption text-subtle">
+                      <span>
+                        {t.dashboard.mastered} {pct(mastered)}
+                      </span>
+                      <span className="tabular-nums">
+                        {t.dashboard.retentionShort} {r.rate === null ? "–" : pct(r.rate)}
+                      </span>
+                    </span>
+                    <span className="block h-1 overflow-hidden rounded-full bg-secondary">
+                      <span className="block h-full rounded-full bg-success" style={{ width: pct(mastered) }} />
+                    </span>
+                  </span>
                 </Link>
               </motion.li>
             ))}
@@ -176,30 +147,13 @@ export function Dashboard() {
         )}
       </section>
 
-      <SubjectDialog open={creating} onClose={() => setCreating(false)} />
+      <p className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
+        <span className={cn("size-1.5 rounded-full", activeKeys > 0 ? "bg-success" : "bg-warning")} aria-hidden />
+        {activeKeys === 0 ? t.dashboard.keyStatusNone : format(t.dashboard.keyStatusSome, { n: activeKeys })}
+        <Link href="/settings#vault" className="font-medium text-brand hover:underline">
+          {t.dashboard.keyStatus}
+        </Link>
+      </p>
     </div>
-  );
-}
-
-function QuickAction({ icon: Icon, title, hint, href, onClick, disabled, soon }: { icon: typeof Plus; title: string; hint: string; href?: string; onClick?: () => void; disabled?: boolean; soon?: string }) {
-  const body = (
-    <>
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground"><Icon className="size-4" aria-hidden /></span>
-      <span className="min-w-0 flex-1 text-left">
-        <span className="block text-sm font-medium">{title}</span>
-        <span className="block truncate text-xs text-muted-foreground">{hint}</span>
-      </span>
-      {soon && <Badge variant="outline" className="shrink-0">{soon}</Badge>}
-    </>
-  );
-  const cls = "flex w-full items-center gap-3 rounded-lg border border-border bg-muted/30 p-2.5 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
-  return (
-    <li>
-      {href ? (
-        <Link href={href} className={cn(cls, "hover:border-primary/50 hover:bg-muted/60")}>{body}</Link>
-      ) : (
-        <button type="button" onClick={onClick} disabled={disabled} className={cn(cls, disabled ? "cursor-not-allowed opacity-60" : "hover:border-primary/50 hover:bg-muted/60")}>{body}</button>
-      )}
-    </li>
   );
 }

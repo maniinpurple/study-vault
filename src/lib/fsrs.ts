@@ -6,7 +6,7 @@
  * Hard ≤ Good < Easy interval ordering for review cards, deterministic fuzz).
  *
  * Field names deliberately match the Prisma `MistakeCard` and `CardAttemptLog` models so results can be
- * persisted without mapping. This module is isomorphic (safe on server and in the browser / local mode).
+ * persisted without mapping. This module is isomorphic (safe on server and in the browser).
  */
 
 // ─── Types ──────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 "use client";
 
-import { Brain, Eye, Loader2 } from "lucide-react";
+import { Eye, Loader2 } from "lucide-react";
 import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
@@ -72,15 +72,12 @@ export function MemoryPanel({ subject }: { subject: Subject }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-glow-from to-glow-to text-white">
-              <Brain className="size-4" aria-hidden />
-            </span>
-            <h2 className="text-base font-semibold tracking-tight">{t.brain.title}</h2>
-            <Badge variant={status === "fresh" ? "secondary" : status === "stale" ? "destructive" : "outline"}>{t.brain[status]}</Badge>
+            <h2 className="text-title">{t.brain.title}</h2>
+            <Badge variant={status === "fresh" ? "secondary" : "outline"}>{t.brain[status]}</Badge>
           </div>
           <p className="max-w-2xl text-xs text-muted-foreground">{t.brain.subtitle}</p>
           {subject.memoryUpdatedAt && (
-            <p className="metric text-[11px] text-muted-foreground">
+            <p className="tabular-nums text-[11px] text-muted-foreground">
               {format(t.brain.meta, { v: subject.memoryVersion, n: subject.memorySourceCardCount, date: dateFmt.format(subject.memoryUpdatedAt) })}
             </p>
           )}
@@ -90,7 +87,7 @@ export function MemoryPanel({ subject }: { subject: Subject }) {
             <Eye />
             {t.brain.inspect}
           </Button>
-          <Button size="lg" onClick={() => void resync()} disabled={syncing || !ai.key || subjectCards.length === 0} className="bg-gradient-to-r from-glow-from to-glow-to text-white hover:opacity-90">
+          <Button size="lg" onClick={() => void resync()} disabled={syncing || !ai.key || subjectCards.length === 0} className="bg-brand text-white hover:opacity-90">
             {syncing ? <Loader2 className="animate-spin" /> : null}
             {syncing ? format(t.brain.resyncing, { n: Math.min(subjectCards.length, 60) }) : t.brain.resync}
           </Button>

@@ -1,13 +1,14 @@
 "use client";
 
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Brain, CalendarCheck2, Check, Coffee, Eye, FlaskConical, Keyboard, Loader2, Plus, ScanLine, Shuffle, Undo2, Zap } from "lucide-react";
+import { Check, Eye, Loader2, Plus, Shuffle, Undo2 } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
 import { TagSuggestionBanner } from "@/components/brain/tag-suggestion-banner";
 import { CardDiagram } from "@/components/card-diagram";
+import { StoredImage } from "@/components/stored-image";
 import { CrosshairCard } from "@/components/crosshair-card";
 import { ExperimentalBadge } from "@/components/experimental-badge";
 import { MathText } from "@/components/math-text";
@@ -73,15 +74,13 @@ export function ReviewArena() {
       <div className="space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              <span className="text-glow-gradient">{t.review.title}</span>
-            </h1>
-            <p className="max-w-2xl text-sm text-muted-foreground">{t.review.subtitle}</p>
+            <h1 className="text-display">{t.review.title}</h1>
+            <p className="max-w-xl text-muted-foreground">{t.review.subtitle}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs" aria-live="polite">
-            <Badge className="metric">{format(t.review.dueNow, { n: queue.ready.length })}</Badge>
-            {queue.later.length > 0 && <Badge variant="secondary" className="metric">{format(t.review.laterToday, { n: queue.later.length })}</Badge>}
-            {reviewed.count > 0 && <Badge variant="outline" className="metric">{format(t.review.progress, { done: reviewed.count, left: queue.ready.length + queue.later.length })}</Badge>}
+            <Badge className="tabular-nums">{format(t.review.dueNow, { n: queue.ready.length })}</Badge>
+            {queue.later.length > 0 && <Badge variant="secondary" className="tabular-nums">{format(t.review.laterToday, { n: queue.later.length })}</Badge>}
+            {reviewed.count > 0 && <Badge variant="outline" className="tabular-nums">{format(t.review.progress, { done: reviewed.count, left: queue.ready.length + queue.later.length })}</Badge>}
           </div>
         </header>
 
@@ -98,7 +97,7 @@ export function ReviewArena() {
                   >
                     <span className="size-2 rounded-full" style={{ backgroundColor: s.color ?? "var(--primary)" }} aria-hidden />
                     {s.name}
-                    <span className="metric font-semibold">{counts.get(s.id)}</span>
+                    <span className="tabular-nums font-semibold">{counts.get(s.id)}</span>
                   </button>
                 </li>
               ))}
@@ -110,7 +109,6 @@ export function ReviewArena() {
         <div aria-live="polite" className="min-h-0">
           {toast && (
             <p role="status" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-accent px-3 py-2 text-sm text-accent-foreground">
-              <CalendarCheck2 className="size-4 shrink-0" aria-hidden />
               {toast}
             </p>
           )}
@@ -137,47 +135,41 @@ export function ReviewArena() {
               <CrosshairCard glow={reviewed.count > 0} className="space-y-4 py-12 text-center">
                 {waiting ? (
                   <>
-                    <Coffee className="mx-auto size-8 text-primary" aria-hidden />
                     <div className="space-y-1">
-                      <h2 className="text-lg font-semibold">{t.review.laterTitle}</h2>
+                      <h2 className="text-title">{t.review.laterTitle}</h2>
                       <p className="text-sm text-muted-foreground">
                         {format(t.review.laterBody, { n: queue.later.length, time: queue.nextReadyAt ? timeFmt.format(queue.later[0].due) : "—" })}
                       </p>
                     </div>
                     <Button variant="outline" size="lg" onClick={() => setStudyAhead(true)}>
-                      <Zap />
                       {t.review.studyAhead}
                     </Button>
                   </>
                 ) : (
                   <>
-                    <Check className="mx-auto size-8 text-primary" aria-hidden />
-                    <div className="space-y-1">
-                      <h2 className="text-lg font-semibold">{reviewed.count > 0 ? t.review.doneTitle : t.review.emptyTitle}</h2>
+                                        <div className="space-y-1">
+                      <h2 className="text-title">{reviewed.count > 0 ? t.review.doneTitle : t.review.emptyTitle}</h2>
                       <p className="text-sm text-muted-foreground">{reviewed.count > 0 ? format(t.review.doneBody, { n: reviewed.count }) : t.review.emptyBody}</p>
                     </div>
                   </>
                 )}
                 {staleSubjects.length > 0 && (
                   <div className="mx-auto flex max-w-xl flex-col items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm sm:flex-row sm:text-left">
-                    <Brain className="size-5 shrink-0 text-primary" aria-hidden />
                     <p className="flex-1 text-muted-foreground">{t.review.memoryHint}</p>
                     <Link
                       href="/subjects"
                       onClick={() => actions.setActiveSubject(staleSubjects[0].id)}
                       className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
                     >
-                      {t.review.openSubject} →
+                      {t.review.openSubject}
                     </Link>
                   </div>
                 )}
                 <div className="flex flex-wrap justify-center gap-2">
                   <Link href="/lab" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground outline-none hover:bg-primary/80 focus-visible:ring-3 focus-visible:ring-ring/50">
-                    <FlaskConical className="size-4" aria-hidden />
                     {t.review.toLab}
                   </Link>
-                  <Link href="/scanner" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50">
-                    <ScanLine className="size-4" aria-hidden />
+                  <Link href="/sources" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50">
                     {t.review.toScanner}
                   </Link>
                 </div>
@@ -229,6 +221,7 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
   const cardTagIds = new Set(snapshot.cardTags.filter((l) => l.cardId === card.id).map((l) => l.tagId));
   const variantActive = variant !== null && showVariant;
   const hasSolution = Boolean(card.solutionLatex || card.correctAnswerLatex);
+  const hasText = card.questionLatex.trim().length > 0;
 
   const reveal = React.useCallback(() => {
     onPin();
@@ -323,7 +316,7 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
       {/* ── Question face ─────────────────────────────────────────── */}
       <CrosshairCard glow className="min-w-0 space-y-4 self-start p-5 sm:p-6">
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -336,19 +329,23 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
           {topic && <span className="text-muted-foreground">· {topic.name}</span>}
           <Badge variant="secondary">{t.review.state[card.state]}</Badge>
           {card.isHighYield && <Badge variant="outline">{t.review.highYield}</Badge>}
-          <span className="metric ml-auto text-muted-foreground">{format(t.review.attemptNo, { n: nextAttempt })}</span>
+          <span className="tabular-nums ml-auto text-muted-foreground">{format(t.review.attemptNo, { n: nextAttempt })}</span>
         </div>
         {card.title && <h2 className="text-sm font-semibold text-muted-foreground">{card.title}</h2>}
 
         {variantActive && variant ? (
           <div className="space-y-3">
             <ExperimentalBadge label={t.review.variantBadge} />
-            <MathText text={variant.questionLatex} className="text-[15px]" />
+            <MathText text={variant.questionLatex} className="text-reading" />
             <p className="text-xs text-muted-foreground">{format(t.review.variantChanges, { changes: variant.changes })}</p>
             {card.diagramImagePath && <p className="text-xs text-muted-foreground">{t.review.diagramOriginal}</p>}
           </div>
         ) : (
-          <MathText text={card.questionLatex} className="text-[15px]" />
+          hasText ? <MathText text={card.questionLatex} className="text-reading" /> : (
+            <div className="overflow-hidden rounded-md border border-border bg-white">
+              <StoredImage path={card.originalCropPath} alt={t.problem.imageAlt} className="mx-auto block max-h-[28rem] w-auto max-w-full" />
+            </div>
+          )
         )}
         <CardDiagram path={card.diagramImagePath} alt={t.review.figure} caption={t.review.figure} />
 
@@ -365,7 +362,7 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
               </Button>
             </>
           ) : (
-            <Button variant="outline" size="sm" onClick={() => void mutate()} disabled={mutating || !ai.key} title={ai.key ? t.review.mutateHint : t.ai.noKey}>
+            <Button variant="outline" size="sm" onClick={() => void mutate()} disabled={mutating || !ai.key || !hasText} title={ai.key ? t.review.mutateHint : t.ai.noKey}>
               {mutating && <Loader2 className="animate-spin" />}
               {mutating ? t.review.mutating : t.review.mutate}
             </Button>
@@ -380,7 +377,6 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
         {!variant && !mutating && <p className="text-xs text-muted-foreground">{ai.key ? t.review.mutateHint : t.ai.noKey}</p>}
         {mutateError && <p role="alert" className="text-sm text-destructive">{mutateError}</p>}
         <p className="hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:flex">
-          <Keyboard className="size-3.5" aria-hidden />
           {t.review.shortcuts}
         </p>
       </CrosshairCard>
@@ -420,7 +416,7 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Textarea value={solutionDraft} onChange={(e) => setSolutionDraft(e.target.value)} placeholder={t.review.solutionPlaceholder} rows={3} className="metric text-[13px]" aria-label={t.review.addSolution} />
+                    <Textarea value={solutionDraft} onChange={(e) => setSolutionDraft(e.target.value)} placeholder={t.review.solutionPlaceholder} rows={3} className="tabular-nums text-[13px]" aria-label={t.review.addSolution} />
                     {solutionDraft.trim() && <MathText text={solutionDraft} className="rounded-lg border border-border p-2" />}
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setSolutionDraft(null)}>{t.common.cancel}</Button>
@@ -502,9 +498,9 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
                     <span className="flex w-full items-center gap-1.5 text-sm leading-snug font-medium">
                       <span className={cn("size-2 shrink-0 rounded-full", RATING_DOT[rating])} aria-hidden />
                       <span className="min-w-0 flex-1">{t.review.ratings[rating]}</span>
-                      <kbd className="metric hidden text-[10px] text-muted-foreground sm:inline">{i + 1}</kbd>
+                      <kbd className="hidden rounded border border-border px-1 font-mono text-[10px] text-subtle sm:inline">{i + 1}</kbd>
                     </span>
-                    <span className="metric text-xs text-muted-foreground">{grading === rating ? <Loader2 className="size-3 animate-spin" aria-hidden /> : intervalLabel(t, locale, intervals[rating])}</span>
+                    <span className="tabular-nums text-xs text-muted-foreground">{grading === rating ? <Loader2 className="size-3 animate-spin" aria-hidden /> : intervalLabel(t, locale, intervals[rating])}</span>
                   </button>
                 ))}
               </div>

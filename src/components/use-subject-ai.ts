@@ -6,12 +6,12 @@ import { aiLanguageFor, pickAiKey } from "@/lib/ai-keys";
 import type { Dictionary } from "@/lib/i18n";
 import type { Subject } from "@/lib/repo/types";
 
-/** BYOK key + AI output language for a subject (Subject → key → account default), and a call descriptor. */
+/** The API key + AI output language for a subject (Subject → key → account default), and a call descriptor. */
 export function useSubjectAi(subject: Subject | null) {
   const { snapshot, user } = useVault();
   const key = pickAiKey(snapshot.apiKeys, subject);
   const language = aiLanguageFor(subject, key, user);
-  const call = (signal?: AbortSignal): AiCall | null => (key ? { userId: user.id, key, language, signal } : null);
+  const call = (signal?: AbortSignal): AiCall | null => (key ? { keyId: key.id, language, signal } : null);
   return { key, language, call };
 }
 

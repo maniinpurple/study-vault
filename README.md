@@ -12,9 +12,10 @@ cp .env.example .env.local   # then: npm run vault:keygen → paste into VAULT_E
 npm run dev
 ```
 
-With no `DATABASE_URL`, the app runs in **local mode** (IndexedDB in the browser) and needs no other setup.
-Set `DATABASE_URL` (+ `DIRECT_URL` on Supabase) and run `npm run db:deploy` to use Postgres.
-On Supabase, also run `supabase/rls.sql` once for defense-in-depth RLS.
+You need a PostgreSQL database: set `DATABASE_URL` (and `DATABASE_URL_POOLED` on a pooled host), `AUTH_SECRET` and
+`VAULT_ENCRYPTION_KEY` in `.env.local`, then run `npm run db:deploy` to apply the migrations.
+Create an account at `/register`. To make an account an admin (unlocks `/admin`):
+`UPDATE users SET role = 'ADMIN' WHERE email = 'you@example.com';`
 
 ## Scripts
 

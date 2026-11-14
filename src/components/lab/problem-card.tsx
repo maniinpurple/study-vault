@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { BookmarkPlus, Check, Eye, EyeOff, Flag, Loader2, PencilRuler, ShieldCheck, Trash2, Wrench } from "lucide-react";
+import { Check, Eye, EyeOff, Flag, Loader2, Trash2 } from "lucide-react";
 import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
@@ -42,27 +42,26 @@ export function ProblemCard({ problem, subject, highlight }: { problem: AiSynthe
 
   return (
     <motion.div initial={highlight ? { opacity: 0, y: 12 } : false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-      <CrosshairCard glow={highlight} className={cn("space-y-4 p-5", highlight && "border-primary/50")}>
+      <CrosshairCard glow={highlight} className={cn("space-y-4 p-5", highlight && "border-brand")}>
         <div className="flex flex-wrap items-center gap-2">
           <ExperimentalBadge label={t.synth.experimentalBadge} />
           <Badge variant="secondary">{t.lab.modeLabel[problem.mode]}</Badge>
-          {problem.difficultyEstimate !== null && <Badge variant="outline" className="metric">{format(t.lab.difficulty, { n: problem.difficultyEstimate })}</Badge>}
-          {problem.usedHighYield && <Badge variant="outline">🔥</Badge>}
-          {problem.revision > 0 && <Badge variant="outline" className="metric">{format(t.lab.revision, { n: problem.revision })}</Badge>}
+          {problem.difficultyEstimate !== null && <Badge variant="outline" className="tabular-nums">{format(t.lab.difficulty, { n: problem.difficultyEstimate })}</Badge>}
+          {problem.usedHighYield && <Badge variant="outline">{t.review.highYield}</Badge>}
+          {problem.revision > 0 && <Badge variant="outline" className="tabular-nums">{format(t.lab.revision, { n: problem.revision })}</Badge>}
           {problem.isFlaggedIncorrect && (
             <Badge variant="destructive">
               <Flag />
               {t.lab.flagged}
             </Badge>
           )}
-          <span className="metric ml-auto text-[11px] text-muted-foreground">{dateFmt.format(problem.createdAt)}</span>
+          <span className="tabular-nums ml-auto text-[11px] text-muted-foreground">{dateFmt.format(problem.createdAt)}</span>
         </div>
 
-        <MathText text={problem.questionLatex} className="text-[15px]" />
+        <MathText text={problem.questionLatex} className="text-reading" />
 
         {problem.diagramDescription && (
           <div className="flex gap-2 rounded-lg border border-dashed border-border p-3 text-sm">
-            <PencilRuler className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
             <div className="space-y-0.5">
               <p className="text-xs font-medium text-muted-foreground">{t.lab.diagram}</p>
               <MathText text={problem.diagramDescription} />
@@ -76,7 +75,7 @@ export function ProblemCard({ problem, subject, highlight }: { problem: AiSynthe
             <ul className="mt-2 space-y-1.5 border-l border-border pl-3">
               {sources.map((card) => (
                 <li key={card.id} className="line-clamp-2">
-                  {card.isHighYield && "🔥 "}
+                  
                   {card.title ?? card.questionLatex.slice(0, 120)}
                 </li>
               ))}
@@ -99,7 +98,7 @@ export function ProblemCard({ problem, subject, highlight }: { problem: AiSynthe
             </Badge>
           ) : (
             <Button variant="ghost" size="sm" onClick={() => void promote()} disabled={busy}>
-              {busy ? <Loader2 className="animate-spin" /> : <BookmarkPlus />}
+              {busy ? <Loader2 className="animate-spin" /> : null}
               {t.lab.promote}
             </Button>
           )}
@@ -134,7 +133,6 @@ export function ProblemCard({ problem, subject, highlight }: { problem: AiSynthe
             {problem.verificationLatex && (
               <details className="rounded-lg border border-border bg-muted/30 p-3">
                 <summary className="flex cursor-pointer items-center gap-1.5 text-xs font-medium">
-                  <ShieldCheck className="size-3.5 text-primary" aria-hidden />
                   {t.lab.verification}
                 </summary>
                 <MathText text={problem.verificationLatex} className="mt-2 text-xs" />
@@ -205,7 +203,6 @@ function ReportForm({ problem, subject, onDone }: { problem: AiSynthesizedProble
     return (
       <div className="space-y-3" role="status">
         <p className={cn("flex items-center gap-2 text-sm font-medium", result.verdict === "FIXED" ? "text-primary" : "text-foreground")}>
-          <ShieldCheck className="size-4" aria-hidden />
           {result.verdict === "FIXED" ? t.lab.fixed : t.lab.noError}
         </p>
         <MathText text={result.explanation} className="rounded-lg border border-border bg-muted/30 p-3" />
@@ -220,7 +217,7 @@ function ReportForm({ problem, subject, onDone }: { problem: AiSynthesizedProble
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex justify-end">
         <Button type="submit" size="lg" disabled={busy || report.trim().length < 3}>
-          {busy ? <Loader2 className="animate-spin" /> : <Wrench />}
+          {busy ? <Loader2 className="animate-spin" /> : null}
           {busy ? t.lab.reportChecking : t.lab.reportSend}
         </Button>
       </div>

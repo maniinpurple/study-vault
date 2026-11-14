@@ -10,9 +10,9 @@ const entry = (patch: Partial<TagFeedbackEntry>): TagFeedbackEntry => ({ at: T0.
 
 describe("tag helpers", () => {
   it("shows base tags in the GUI language until renamed", () => {
-    const base = tag("b", { i18nKey: "tags.base.stuck_approach", name: "Tắc hướng biến đổi" });
+    const base = tag("b", { i18nKey: "tags.base.stuck_approach", name: "Bí hướng giải" });
     expect(tagDisplayName(getDictionary("EN"), base)).toBe("Stuck on the approach");
-    expect(tagDisplayName(getDictionary("VI"), base)).toBe("Tắc hướng biến đổi");
+    expect(tagDisplayName(getDictionary("VI"), base)).toBe("Bí hướng giải");
     expect(tagDisplayName(getDictionary("EN"), { ...base, i18nKey: null, name: "Bẫy paraphrase" })).toBe("Bẫy paraphrase");
   });
   it("lists only live tags of the subject plus global ones", () => {

@@ -9,12 +9,26 @@ export type Language = (typeof LANGUAGES)[number];
 export const THEMES = ["OBSIDIAN", "DARK_GRAY", "LIGHT"] as const;
 export type ThemePreference = (typeof THEMES)[number];
 
-/** `data-theme` attribute value on <html> for each theme. */
-export const THEME_ATTRIBUTE: Record<ThemePreference, string> = {
-  OBSIDIAN: "obsidian",
-  DARK_GRAY: "dark-gray",
+/**
+ * `data-theme` attribute value on <html> for each stored preference. The interface ships two themes — Paper (light)
+ * and Dark (DESIGN_SYSTEM.md §2); the legacy `OBSIDIAN` value renders as Dark so stored preferences keep working.
+ */
+export const THEME_ATTRIBUTE: Record<ThemePreference, "light" | "dark"> = {
+  OBSIDIAN: "dark",
+  DARK_GRAY: "dark",
   LIGHT: "light",
 };
+
+/** The themes a user can pick, and the value each one stores. */
+export const THEME_CHOICES = [
+  { value: "LIGHT", mode: "light" },
+  { value: "DARK_GRAY", mode: "dark" },
+] as const satisfies readonly { value: ThemePreference; mode: "light" | "dark" }[];
+
+export const DEFAULT_THEME: ThemePreference = "LIGHT";
+
+export const USER_ROLES = ["USER", "ADMIN"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
 
 export const AI_PROVIDERS = ["GEMINI", "OPENAI", "ANTHROPIC", "CUSTOM"] as const;
 export type AiProvider = (typeof AI_PROVIDERS)[number];
@@ -23,7 +37,7 @@ export const SYNTHESIS_MIX_MIN_SOURCES = 2;
 export const SYNTHESIS_MIX_MAX_SOURCES = 3;
 
 /** Label rendered (via i18n) on every AI-synthesized problem. */
-export const EXPERIMENTAL_BADGE_I18N_KEY = "synth.experimentalBadge";
+export const EXPERIMENTAL_BADGE_I18N_KEY = "ai.generatedBadge";
 
 export interface BaseTagDefinition {
   slug: string;
@@ -34,7 +48,7 @@ export interface BaseTagDefinition {
 }
 
 /**
- * The four base error tags seeded for every SUBJECT (origin = BASE, scopeKey = subjectId), so each subject can evolve
+ * The four base error tags seeded for every SUBJECT (origin = BASE, scopeKey = subjectId, looked up by slug), so each subject can evolve
  * its own vocabulary (an IELTS rename never touches TSA Math). Display names follow the GUI language via `i18nKey`
  * until the user accepts a rename, which clears `i18nKey` and pins the custom name.
  */
@@ -42,36 +56,28 @@ export const BASE_TAGS: readonly BaseTagDefinition[] = [
   {
     slug: "concept_gap",
     i18nKey: "tags.base.concept_gap",
-    color: "#A855F7",
-    name: { VI: "Hổng kiến thức nền", EN: "Foundational gap" },
+    color: "#906DB7",
+    name: { VI: "Hổng kiến thức", EN: "Knowledge gap" },
   },
   {
     slug: "misread",
     i18nKey: "tags.base.misread",
-    color: "#38BDF8",
-    name: { VI: "Đọc lướt / Bẫy đề", EN: "Skimmed / Question trap" },
+    color: "#258ABB",
+    name: { VI: "Đọc sai đề", EN: "Misread the question" },
   },
   {
     slug: "stuck_approach",
     i18nKey: "tags.base.stuck_approach",
-    color: "#10B981",
-    name: { VI: "Tắc hướng biến đổi", EN: "Stuck on the approach" },
+    color: "#3D9461",
+    name: { VI: "Bí hướng giải", EN: "Stuck on the approach" },
   },
   {
     slug: "calculation",
     i18nKey: "tags.base.calculation",
-    color: "#F43F5E",
-    name: { VI: "Sai tính toán / Thao tác", EN: "Calculation / execution slip" },
+    color: "#BB6456",
+    name: { VI: "Tính toán sai", EN: "Calculation slip" },
   },
 ];
-
-/** Retired base-tag slugs → the base tag that absorbs their card links (IndexedDB v4 migration). */
-export const RETIRED_BASE_TAG_SLUGS: Readonly<Record<string, string>> = { careless: "calculation" };
-
-/** Deterministic id of a subject's base tag, so seeding is idempotent and concurrent loads cannot duplicate it. */
-export function baseTagId(subjectId: string, slug: string): string {
-  return `tag-base-${subjectId}-${slug}`;
-}
 
 /** Value of `AdaptiveTag.scopeKey` for a tag in the given subject (or global). */
 export function tagScopeKey(subjectId: string | null | undefined): string {
@@ -142,13 +148,28 @@ export const AI_PROVIDER_META: Record<AiProvider, AiProviderMeta> = {
   },
 };
 
-/** Subject accent palette (stored on Subject.color). */
-export const SUBJECT_COLORS = ["#6366F1", "#A855F7", "#38BDF8", "#10B981", "#F59E0B", "#F43F5E", "#EC4899", "#14B8A6"] as const;
+/**
+ * Subject / tag swatches (stored on Subject.color and AdaptiveTag.color): one perceptually even ramp
+ * (OKLCH L 0.60, C ≈ 0.115) so no subject shouts on either theme. See DESIGN_SYSTEM.md §2.4.
+ */
+export const SUBJECT_COLORS = ["#5D7EC5", "#906DB7", "#258ABB", "#3D9461", "#A5761D", "#BB6456", "#B56184", "#209292"] as const;
+
+/** Swatches stored by earlier versions → their counterpart on the current ramp. */
+const LEGACY_SWATCHES: Readonly<Record<string, string>> = {
+  "#6366F1": "#5D7EC5", "#A855F7": "#906DB7", "#38BDF8": "#258ABB", "#10B981": "#3D9461",
+  "#F59E0B": "#A5761D", "#F43F5E": "#BB6456", "#EC4899": "#B56184", "#14B8A6": "#209292",
+};
+
+/** Color to draw for a stored swatch (legacy values are mapped onto the current ramp); null when none is stored. */
+export function swatchColor(color: string | null | undefined): string | null {
+  if (!color) return null;
+  return LEGACY_SWATCHES[color.toUpperCase()] ?? color;
+}
 
 export const STORAGE_KEYS = {
   prefs: "vl:prefs",
-  activeAccount: "vl:account",
   activeSubject: "vl:subject",
+  sidebar: "vl:sidebar",
 } as const;
 
 export function slugify(input: string): string {
@@ -200,7 +221,7 @@ export const MAX_PENDING_TAG_SUGGESTIONS = 3;
 /** Bumped whenever the synthesizer prompt contract changes (stored on every AiSynthesizedProblem). */
 export const SYNTH_PROMPT_VERSION = "synth-v1";
 
-/** Upload limits for the scanner (client-side guard; the file never leaves the device except cropped images sent to OCR). */
+/** Upload limits for sources, checked in the browser and enforced again by the upload route. */
 export const SCAN_LIMITS = {
   maxFileBytes: 60 * 1024 * 1024,
   maxPdfPages: 300,
@@ -208,5 +229,8 @@ export const SCAN_LIMITS = {
   renderLongEdge: 2600,
   /** Long edge (px) of a crop sent to the vision model. */
   ocrLongEdge: 1600,
-  maxBoxesPerScan: 40,
+  /** Long edge (px) of the thumbnail kept for the Sources library. */
+  thumbnailLongEdge: 640,
+  /** Largest question crop / figure image accepted for one problem. */
+  maxCropBytes: 8 * 1024 * 1024,
 } as const;

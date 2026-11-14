@@ -1,6 +1,6 @@
 /**
  * Problem-generation prompt contracts — pure and client-safe:
- * - "⚡ AI Đổi số liệu" (mutate numbers during review),
+ * - "New numbers" (mutate numbers during review),
  * - the Scoped Exam Prep synthesizer (Mode A clone / Mode B 2–3-card mix),
  * - "report & fix" for a synthesized problem.
  * Every generator must solve and independently verify its own problem before answering (hallucination guardrail);
@@ -177,7 +177,7 @@ export const SYNTH_SYSTEM_PROMPT = [
 
 function formatSource(s: SynthSource): string {
   return [
-    `[${s.ref}]${s.highYield ? " 🔥 HIGH-YIELD (teacher emphasised)" : ""}${s.topic ? ` — topic: ${s.topic}` : ""}`,
+    `[${s.ref}]${s.highYield ? " [HIGH-YIELD: teacher emphasised]" : ""}${s.topic ? ` — topic: ${s.topic}` : ""}`,
     `Question:\n${s.questionLatex}`,
     s.solutionLatex ? `Known solution:\n${s.solutionLatex}` : null,
     s.teacherNote ? `Teacher's note: ${s.teacherNote}` : null,
