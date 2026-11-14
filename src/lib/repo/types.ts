@@ -96,13 +96,21 @@ export interface Topic {
   updatedAt: Date;
 }
 
-/** Crop geometry normalised to the source page (0–1). `page` is 1-based. */
-export interface CropBox {
+/** One rectangle on one page, normalised to that page (0–1). `page` is 1-based. */
+export interface CropRegion {
   page: number;
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+/**
+ * Crop geometry of a problem: its first region, plus `more` when the question was stitched together from several
+ * regions (for example the bottom of one page and the top of the next), in reading order.
+ */
+export interface CropBox extends CropRegion {
+  more?: CropRegion[];
 }
 
 export interface ExamUpload {

@@ -142,6 +142,18 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
   `{ page, x, y, w, h }`, crop stored at `originalCropPath`, `questionLatex = ""`). **Saving never needs an API key.**
   The crop animates from the page into its tray card; the page keeps a highlighter overlay per snip, numbered in reading
   order (`orderSnips`), and clicking an overlay selects its card (and vice versa).
+- **Cropping flow**: dragging draws a pending region — nothing is saved yet. A floating toolbar beside the newest region
+  offers Save / Delete (it is counter-scaled by the viewer's `--zoom`, so it keeps its size). **Stitching is implicit**: draw a
+  second region (any page) while one is pending and the toolbar moves to it and offers "Save stitched problem"; Delete takes back
+  the newest region, Esc discards all. The bottom bar is a passive status. Regions are sorted by page/top/left and stacked at
+  one width (`src/lib/stitch.ts`, `stitchCanvases`). `cropBox` holds the first region plus `more` (JSON — no schema change);
+  `cropRegions(card)` lists them all, and the page shows an overlay on each (keys must include the index: one card can have
+  several regions on one page).
+- **Viewer zoom/pan** uses `react-zoom-pan-pinch`. Gotchas: `trackPadPanning` is **disabled by default** — it must be enabled for
+  two-finger scrolling to pan; `wheel.wheelDisabled` leaves only ctrl+wheel (macOS pinch) zooming; `wheel.step` is multiplied by the
+  wheel delta in smooth mode, so it is kept tiny (0.004). These values were tuned by feel on a real trackpad — **do not "calibrate"
+  them** (a custom eased zoom engine was tried and rejected). Zoom state is written straight to the DOM (`--zoom`, the % label),
+  never to React state. Mouse/touch dragging pans only in the Scroll tool. A "?" popover (`help-tip.tsx`) explains the controls.
 - Each tray card keeps **image + error tags + solution + takeaway together** and autosaves (`ProblemFields`).
 - "Convert to text" is optional and per card: the vision model (user's key, `/api/ai/ocr`) rewrites the crop into clean
   Markdown+LaTeX without handwritten marks. A problem therefore has text, an image, or both; UI that needs text
@@ -151,6 +163,8 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
 ### 4.2b Problem Vault (`/vault`)
 - Every saved problem in one place, each card showing the question (image or formatted math) with its solution and
   takeaway. Standalone problems can be added (text and/or image).
+- Three views — Grid, List, Detailed (`problem-views.tsx`) — chosen with the shared `ViewToggle` and remembered per device in
+  `localStorage` (`useStoredChoice`, key `vl:vault-view`). The Sources library has the same toggle (`vl:sources-view`).
 - `src/lib/vault.ts` (pure, tested) filters (subject, search ignoring diacritics, priority, review status), sorts and
   groups (date, topic, source, error tag, review status); `reviewStatus()` lives in `src/lib/problems.ts`.
 
@@ -159,12 +173,28 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
 - Card scheduling fields live on `MistakeCard`; every review appends a `CardAttemptLog` with a sequential
   `attemptNumber` (Attempt 1, 2, 3 … / "Lần 1, 2, 3"), the rating, a free-text note, `timeSpentMs`,
   `variantQuestionLatex` (set when answered on an AI number-variant) and FSRS before/after snapshots.
+- **Logic-problem intervals**: grades map to fixed days (`REVIEW_INTERVAL_DAYS` in `review.ts`): Quên 1, Khó 3, Nhớ 7, Dễ 14 — no
+  minutes-long learning steps, because a logic problem is only tested once the specific numbers are forgotten. `scheduleReview`
+  still runs FSRS to keep stability/difficulty/lapses (used by the weakness ranking and "mastered"), then overrides `due`,
+  `scheduledDays` and sets state to REVIEW; `previewIntervals()` returns the same days, so button labels equal the stored result.
+  Only cards graded before this change can still be in a (re)learning step.
 - Per-user `desiredRetention`, `maximumInterval`, optional custom `fsrsWeights`.
 - `src/lib/review.ts` (pure, tested) builds today's queue (local day boundary; (re)learning steps only within a 20-min
   learn-ahead window) and previews/applies grades — the button intervals and the stored result use the same scheduler.
+  The review header has a subject dropdown ("Đang ôn tập" + Tất cả môn / each subject with its due count) bound to the same global
+  filter as the sidebar; the filter strictly limits the queue, and a pinned card from another subject never survives a change. An image-only question is large and opens a
+  centered, blurred-backdrop lightbox (`image-lightbox.tsx`, `react-zoom-pan-pinch`, same zoom settings as the exam viewer). The lightbox
+  is a z-60 portal, **not** a native `<dialog>` (top-layer dialogs sit above every z-index and would hide the z-70 Scratchpad).
+  Subjects have no exam date in the UI (the DB column is unused). The Overview shows a welcome state, not "done for today", when there are no problems.
   Review shows the question first (clean text + figure, or the crop image for image-only problems); solution, notes,
   attempt log, reflection note and error tags only after "Show answer". "New numbers" (`/api/ai/mutate`, light tier) is
   the only AI call in review and needs question text.
+
+- **Scratchpad** (`src/components/scratchpad.tsx`, `react-rnd` + `react-sketch-canvas`): mounted once in `AppShell`, so it is on every page.
+  A round button (bottom-right) opens a Quick-Note-style window: drag by the header, resize from any edge, pen colors black / red /
+  yellow highlighter, eraser, undo, clear, and four CSS paper patterns (ivory, dots, lined, grid). The overlay layer is
+  `pointer-events-none`, so only the window and button take clicks. Purely temporary — never stored; paper/ink colors are fixed
+  (not themed), like exam pages.
 
 ### 4.4 "Second Brain" AI memory
 - `UserAiPersona` (1:1 user): hidden global learner persona (summary, strengths, weaknesses); `preferences.tagFeedback`

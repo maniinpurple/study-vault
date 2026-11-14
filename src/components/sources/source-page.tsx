@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { Button } from "@/components/ui/button";
 import { boxFromPoints, isUsableBox, toNormPoint, type NormBox, type Point } from "@/lib/scan-geometry";
 import type { ScanDocument } from "@/lib/scan-source";
 import { cn } from "@/lib/utils";
@@ -12,24 +13,45 @@ export interface PageSnip {
   box: NormBox;
 }
 
+/** A region drawn but not saved yet. */
+export interface PendingRegion {
+  key: string;
+  /** 1-based position in the stitched image. */
+  number: number;
+  box: NormBox;
+  /** The most recently drawn region: the one that carries the floating toolbar. */
+  newest: boolean;
+}
+
+/** The floating toolbar beside the newest pending region. */
+export interface RegionToolbar {
+  saveLabel: string;
+  deleteLabel: string;
+  onSave(): void;
+  onDelete(): void;
+}
+
 interface Props {
   doc: ScanDocument;
   page: number;
-  /** Scroll container, used as the lazy-render root. */
+  /** The clipping viewport, used as the lazy-render root. */
   scrollRoot: React.RefObject<HTMLElement | null>;
   snips: PageSnip[];
+  /** Regions drawn on this page and not saved yet. */
+  pending: PendingRegion[];
+  toolbar: RegionToolbar;
   selectedId: string | null;
   /** Snip mode captures drags; otherwise the page only scrolls and snips are tappable. */
   snipMode: boolean;
-  labels: { page: string; snip: (n: number) => string; rendering: string; failed: string };
-  onSnip(page: number, box: NormBox, rect: DOMRect): void;
+  labels: { page: string; snip: (n: number) => string; part: (n: number) => string; rendering: string; failed: string };
+  onSnip(page: number, box: NormBox): void;
   onSelect(id: string): void;
 }
 
 const pct = (n: number) => `${n * 100}%`;
 
 /** One exam page: lazily rendered bitmap, highlighter marks for saved snips, and the drag-to-snip selection. */
-export function SourcePage({ doc, page, scrollRoot, snips, selectedId, snipMode, labels, onSnip, onSelect }: Props) {
+export function SourcePage({ doc, page, scrollRoot, snips, pending, toolbar, selectedId, snipMode, labels, onSnip, onSelect }: Props) {
   const frameRef = React.useRef<HTMLDivElement>(null);
   const holderRef = React.useRef<HTMLDivElement>(null);
   const [near, setNear] = React.useState(false);
@@ -72,7 +94,7 @@ export function SourcePage({ doc, page, scrollRoot, snips, selectedId, snipMode,
   const pointFrom = (e: { clientX: number; clientY: number }) => toNormPoint(e.clientX, e.clientY, frameRef.current?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0, height: 0 });
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (!snipMode || status !== "ready" || (e.pointerType === "mouse" && e.button !== 0)) return;
+    if (!snipMode || !e.isPrimary || status !== "ready" || (e.pointerType === "mouse" && e.button !== 0)) return;
     if ((e.target as HTMLElement).closest("button")) return;
     const start = pointFrom(e);
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -89,9 +111,7 @@ export function SourcePage({ doc, page, scrollRoot, snips, selectedId, snipMode,
     if (!drag) return;
     const box = boxFromPoints(drag.start, pointFrom(e));
     setDrag(null);
-    const frame = frameRef.current?.getBoundingClientRect();
-    if (!frame || !isUsableBox(box)) return;
-    onSnip(page, box, new DOMRect(frame.left + box.x * frame.width, frame.top + box.y * frame.height, box.w * frame.width, box.h * frame.height));
+    if (isUsableBox(box)) onSnip(page, box);
   }
 
   return (
@@ -106,19 +126,20 @@ export function SourcePage({ doc, page, scrollRoot, snips, selectedId, snipMode,
       onPointerCancel={() => setDrag(null)}
       onPointerLeave={() => setHover(null)}
       style={{ aspectRatio: String(aspect) }}
-      className={cn("relative w-full overflow-hidden rounded-sm border border-border bg-white shadow-sm select-none", snipMode ? "cursor-crosshair touch-none" : "touch-auto")}
+      className={cn("relative w-full rounded-sm border border-border bg-white shadow-sm select-none", snipMode ? "cursor-crosshair touch-none" : "touch-auto")}
     >
-      <div ref={holderRef} className="absolute inset-0" aria-hidden />
+      <div ref={holderRef} className="absolute inset-0 overflow-hidden rounded-sm" aria-hidden />
       {status !== "ready" && (
         <p role="status" className="absolute inset-0 grid place-items-center text-caption text-neutral-500">
           {status === "failed" ? labels.failed : labels.rendering}
         </p>
       )}
 
-      {snips.map((snip) => {
+      {snips.map((snip, index) => {
         const selected = snip.id === selectedId;
+        // A stitched problem can have several regions on one page, so the id alone is not unique here.
         return (
-          <div key={snip.id} className="absolute" style={{ left: pct(snip.box.x), top: pct(snip.box.y), width: pct(snip.box.w), height: pct(snip.box.h) }}>
+          <div key={`${snip.id}:${index}`} className="absolute" style={{ left: pct(snip.box.x), top: pct(snip.box.y), width: pct(snip.box.w), height: pct(snip.box.h) }}>
             <div aria-hidden className={cn("mark-ink absolute inset-0 rounded-[3px] transition-opacity", selected ? "opacity-100" : "opacity-70")} />
             <button
               type="button"
@@ -135,6 +156,15 @@ export function SourcePage({ doc, page, scrollRoot, snips, selectedId, snipMode,
         );
       })}
 
+      {pending.map((part) => (
+        <div key={part.key} className="absolute" style={{ left: pct(part.box.x), top: pct(part.box.y), width: pct(part.box.w), height: pct(part.box.h) }}>
+          <div aria-label={labels.part(part.number)} className="pointer-events-none absolute inset-0 rounded-[3px] border-2 border-dashed border-brand bg-brand/10">
+            <span className="absolute -top-px -left-px rounded-br-md rounded-tl-[2px] bg-brand px-1.5 py-0.5 text-[11px] leading-none font-semibold text-brand-foreground tabular-nums">{part.number}</span>
+          </div>
+          {part.newest && <FloatingToolbar box={part.box} toolbar={toolbar} />}
+        </div>
+      ))}
+
       {/* Crosshair guides follow the pointer while the snip tool is armed. */}
       {snipMode && hover && !drag && status === "ready" && (
         <div aria-hidden className="pointer-events-none absolute inset-0">
@@ -150,6 +180,32 @@ export function SourcePage({ doc, page, scrollRoot, snips, selectedId, snipMode,
           style={{ left: pct(drag.box.x), top: pct(drag.box.y), width: pct(drag.box.w), height: pct(drag.box.h) }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Save / delete buttons right beside the region just drawn. It sits under the region's bottom corner (above it when
+ * the region ends near the page bottom) and is counter-scaled by the viewer's zoom (`--zoom`), so it stays the same
+ * size on screen however far the page is zoomed.
+ */
+function FloatingToolbar({ box, toolbar }: { box: NormBox; toolbar: RegionToolbar }) {
+  const alignLeft = box.x + box.w < 0.4;
+  const above = box.y + box.h > 0.9;
+  return (
+    <div
+      role="toolbar"
+      aria-label={toolbar.saveLabel}
+      onPointerDown={(e) => e.stopPropagation()}
+      style={{ transform: "scale(calc(1 / var(--zoom, 1)))", transformOrigin: `${above ? "bottom" : "top"} ${alignLeft ? "left" : "right"}` }}
+      className={cn("absolute z-30 flex w-max gap-1 rounded-lg border border-border bg-popover p-1 shadow-lg", alignLeft ? "left-0" : "right-0", above ? "bottom-full mb-2" : "top-full mt-2")}
+    >
+      <Button size="sm" onClick={toolbar.onSave}>
+        {toolbar.saveLabel}
+      </Button>
+      <Button variant="ghost" size="sm" onClick={toolbar.onDelete}>
+        {toolbar.deleteLabel}
+      </Button>
     </div>
   );
 }

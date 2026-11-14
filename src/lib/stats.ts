@@ -91,7 +91,6 @@ export interface SubjectOverview {
   /** Share of cards in REVIEW state with stability ≥ 21 days (0–1). */
   mastered: number;
   retention: RetentionResult;
-  daysToExam: number | null;
 }
 
 export function subjectOverviews(
@@ -102,7 +101,6 @@ export function subjectOverviews(
   utcOffsetMinutes: number,
 ): SubjectOverview[] {
   const cardSubject = new Map(cards.map((c) => [c.id, c.subjectId]));
-  const today = startOfDay(now, utcOffsetMinutes).getTime();
   return subjects
     .filter((s) => s.archivedAt === null)
     .map((subject) => {
@@ -115,7 +113,6 @@ export function subjectOverviews(
         highYield: own.filter((c) => c.isHighYield).length,
         mastered: own.length === 0 ? 0 : own.filter((c) => c.state === "REVIEW" && c.stability >= 21).length / own.length,
         retention: computeRetention(ownLogs, now),
-        daysToExam: subject.examDate ? Math.ceil((subject.examDate.getTime() - today) / DAY_MS) : null,
       };
     });
 }

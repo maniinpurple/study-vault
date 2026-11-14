@@ -6,6 +6,7 @@ import { SCAN_LIMITS, type FileKind } from "@/lib/constants";
 import { applyDocumentScan } from "@/lib/scan-filter";
 import { planScanFiles, type ScanErrorCode } from "@/lib/scan-files";
 import { fitLongEdge, toPixelRect, type NormBox } from "@/lib/scan-geometry";
+import { stitchLayout } from "@/lib/stitch";
 
 export type { ScanErrorCode } from "@/lib/scan-files";
 
@@ -146,6 +147,18 @@ export function cropCanvas(canvas: HTMLCanvasElement, box: NormBox, maxLongEdge?
   const ctx = context2d(out);
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, width, height);
+  return out;
+}
+
+/** Stack crops vertically on a white canvas, scaled to one width (see `stitchLayout`). */
+export function stitchCanvases(parts: readonly HTMLCanvasElement[]): HTMLCanvasElement {
+  const layout = stitchLayout(parts.map((p) => ({ width: p.width, height: p.height })));
+  const out = newCanvas(layout.width, layout.height);
+  const ctx = context2d(out);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.imageSmoothingQuality = "high";
+  layout.placements.forEach((place, i) => ctx.drawImage(parts[i], 0, place.y, place.width, place.height));
   return out;
 }
 

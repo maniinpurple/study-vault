@@ -4,22 +4,23 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Hand, Minus, PanelRight, Plus, Scissors } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
+import { TransformComponent, TransformWrapper, type ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 
 import { useVault } from "@/components/app-provider";
 import { Modal } from "@/components/modal";
+import { HelpTip } from "@/components/sources/help-tip";
 import { SnipCard } from "@/components/sources/snip-card";
-import { SourcePage, type PageSnip } from "@/components/sources/source-page";
+import { SourcePage, type PageSnip, type PendingRegion, type RegionToolbar } from "@/components/sources/source-page";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/field";
 import { format } from "@/lib/i18n";
 import { spring } from "@/lib/motion";
-import { orderSnips } from "@/lib/problems";
-import type { ExamUpload } from "@/lib/repo/types";
+import { cropRegions, orderSnips } from "@/lib/problems";
+import type { CropRegion, ExamUpload } from "@/lib/repo/types";
 import type { NormBox } from "@/lib/scan-geometry";
-import { canvasToBlob, cropCanvas, openScanSource, ScanDocument } from "@/lib/scan-source";
+import { canvasToBlob, cropCanvas, openScanSource, ScanDocument, stitchCanvases } from "@/lib/scan-source";
+import { MAX_STITCH_PARTS, sortRegions } from "@/lib/stitch";
 import { cn } from "@/lib/utils";
-
-const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 
 interface Flight {
   id: string;
@@ -27,6 +28,9 @@ interface Flight {
   from: DOMRect;
   to: DOMRect | null;
 }
+
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 3;
 
 /** Opens the stored file(s) of a source as a renderable document. */
 function useSourceDocument(upload: ExamUpload | null) {
@@ -73,7 +77,7 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
   const { doc, failed } = useSourceDocument(upload);
 
   const [snipMode, setSnipMode] = React.useState(true);
-  const [zoom, setZoom] = React.useState(1);
+  const [pending, setPending] = React.useState<(CropRegion & { key: string })[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [trayOpen, setTrayOpen] = React.useState(false);
   const [flight, setFlight] = React.useState<Flight | null>(null);
@@ -82,11 +86,25 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
   const [title, setTitle] = React.useState(upload?.title ?? "");
   const viewerRef = React.useRef<HTMLDivElement>(null);
   const trayRef = React.useRef<HTMLDivElement>(null);
+  const zoomLabelRef = React.useRef<HTMLSpanElement>(null);
+  const zoomRef = React.useRef<ReactZoomPanPinchRef>(null);
 
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const subjectId = subjects.find((s) => s.id === upload?.subjectId)?.id ?? subjects.find((s) => s.id === activeSubjectId)?.id ?? subjects[0]?.id ?? null;
   const snips = React.useMemo(() => orderSnips(snapshot.cards, sourceId), [snapshot.cards, sourceId]);
   const numbers = new Map(snips.map((card, i) => [card.id, i + 1]));
+  const stitching = pending.length > 1;
+  const newest = pending[pending.length - 1] ?? null;
+  /** Pending regions in the order they will be stacked, numbered from 1. */
+  const ordered = React.useMemo(() => sortRegions(pending), [pending]);
+
+  // Escape abandons a stitch in progress.
+  React.useEffect(() => {
+    if (pending.length === 0) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPending([]);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pending.length]);
 
   // Once the new card is in the tray, measure where its image sits so the crop can fly there.
   React.useLayoutEffect(() => {
@@ -117,18 +135,56 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
     );
   }
 
-  async function snip(page: number, box: NormBox, rect: DOMRect) {
+  /** Crop, upload and show a problem built from one or more regions of the document. */
+  async function saveRegions(regions: CropRegion[], from: DOMRect) {
     if (!doc || !upload) return;
     if (!subjectId) return setError(t.sources.needSubject);
     setError(null);
     try {
-      const blob = await canvasToBlob(cropCanvas(await doc.pageCanvas(page, "original"), box), "image/jpeg", 0.92);
-      const card = await actions.createProblem({ subjectId, examUploadId: upload.id, questionLatex: "", sourcePage: page, cropBox: { page, ...box }, originalCrop: blob });
+      const crops = await Promise.all(regions.map(async (r) => cropCanvas(await doc.pageCanvas(r.page, "original"), r)));
+      const blob = await canvasToBlob(crops.length === 1 ? crops[0] : stitchCanvases(crops), "image/jpeg", 0.92);
+      const [first, ...more] = regions.map(({ page, x, y, w, h }) => ({ page, x, y, w, h }));
+      const card = await actions.createProblem({
+        subjectId, examUploadId: upload.id, questionLatex: "", sourcePage: first.page, cropBox: more.length > 0 ? { ...first, more } : first, originalCrop: blob,
+      });
+      setPending([]);
       setSelectedId(card.id);
-      setFlight({ id: card.id, url: URL.createObjectURL(blob), from: rect, to: null });
+      setFlight({ id: card.id, url: URL.createObjectURL(blob), from, to: null });
     } catch {
       setError(t.sources.tray.saveFailed);
     }
+  }
+
+  /** A finished drag becomes a pending region: nothing is saved until the floating Save button is pressed. */
+  function onRegion(page: number, box: NormBox) {
+    if (pending.length >= MAX_STITCH_PARTS) return setError(format(t.sources.stitch.tooMany, { n: MAX_STITCH_PARTS }));
+    setError(null);
+    setPending((prev) => [...prev, { key: crypto.randomUUID(), page, ...box }]);
+  }
+
+  /** Where a region currently is on screen (the page may have been scrolled or zoomed since it was drawn). */
+  function regionRect(region: CropRegion): DOMRect {
+    const frame = viewerRef.current?.querySelector(`[data-page="${region.page}"]`)?.getBoundingClientRect();
+    return frame ? new DOMRect(frame.left + region.x * frame.width, frame.top + region.y * frame.height, region.w * frame.width, region.h * frame.height) : new DOMRect();
+  }
+
+  const toolbar: RegionToolbar = {
+    saveLabel: stitching ? t.sources.stitch.save : t.sources.tools.save,
+    deleteLabel: t.sources.tools.remove,
+    onSave: () => newest && void saveRegions(ordered, regionRect(newest)),
+    // Delete takes back the newest region; the toolbar moves to the one before it.
+    onDelete: () => setPending((prev) => prev.slice(0, -1)),
+  };
+
+  /** Scroll the viewer so `page` sits at the top, keeping the current zoom. */
+  function goToPage(page: number) {
+    const zoom = zoomRef.current;
+    const frame = viewerRef.current?.querySelector(`[data-page="${page}"]`);
+    const content = zoom?.instance.contentComponent;
+    if (!zoom || !frame || !content) return;
+    const { positionX, scale: current } = zoom.instance.state;
+    const top = (frame.getBoundingClientRect().top - content.getBoundingClientRect().top) / current;
+    void zoom.setTransform(positionX, -top * current + 8, current, 300, "easeOut");
   }
 
   function selectFromPage(id: string) {
@@ -141,21 +197,19 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
     setSelectedId(id);
     if (page === null) return;
     setTrayOpen(false);
-    viewerRef.current?.querySelector(`[data-page="${page}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    // The tray is hidden on small screens until the viewer is shown again; wait a frame for it to lay out.
+    requestAnimationFrame(() => goToPage(page));
   }
 
-  const stepZoom = (dir: 1 | -1) => {
-    const index = ZOOM_STEPS.findIndex((z) => z >= zoom - 0.001);
-    setZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, (index === -1 ? ZOOM_STEPS.length - 1 : index) + dir))]);
-  };
-
-  const pageLabels = (page: number) => ({
-    page: format(t.problem.page, { n: page }),
+  const pageLabels = {
     snip: (n: number) => format(t.problem.label, { n }),
     rendering: t.sources.tools.rendering,
     failed: t.sources.tools.renderFailed,
-  });
-  const snipsOf = (page: number): PageSnip[] => snips.filter((c) => c.sourcePage === page && c.cropBox).map((c) => ({ id: c.id, number: numbers.get(c.id) ?? 0, box: c.cropBox! }));
+  };
+  const snipsOf = (page: number): PageSnip[] =>
+    snips.flatMap((card) => cropRegions(card).filter((r) => r.page === page).map((r) => ({ id: card.id, number: numbers.get(card.id) ?? 0, box: { x: r.x, y: r.y, w: r.w, h: r.h } })));
+  const pendingOf = (page: number): PendingRegion[] =>
+    ordered.flatMap((r, i) => (r.page === page ? [{ key: r.key, number: i + 1, box: { x: r.x, y: r.y, w: r.w, h: r.h }, newest: r.key === newest?.key }] : []));
   const tool = (active: boolean) => cn("relative flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors", active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground");
 
   return (
@@ -194,14 +248,18 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
               </button>
             ))}
           </div>
-          <div className="hidden items-center sm:flex">
-            <Button variant="ghost" size="icon-sm" onClick={() => stepZoom(-1)} disabled={zoom <= ZOOM_STEPS[0]} aria-label={t.sources.tools.zoomOut}>
+          <HelpTip />
+          <div className="flex items-center gap-1" role="group" aria-label={t.sources.tools.zoomIn}>
+            <Button variant="outline" size="icon-sm" onClick={() => void zoomRef.current?.zoomOut(0.25, 200)} aria-label={t.sources.tools.zoomOut}>
               <Minus />
             </Button>
-            <button type="button" onClick={() => setZoom(1)} title={t.sources.tools.fit} className="h-7 min-w-12 rounded-md text-center text-caption text-muted-foreground tabular-nums hover:bg-muted hover:text-foreground">
-              {Math.round(zoom * 100)}%
-            </button>
-            <Button variant="ghost" size="icon-sm" onClick={() => stepZoom(1)} disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} aria-label={t.sources.tools.zoomIn}>
+            <Button variant="outline" size="sm" onClick={() => void zoomRef.current?.resetTransform(250)} title={t.sources.tools.fit} className="gap-1.5 px-2.5">
+              {t.sources.tools.reset}
+              <span ref={zoomLabelRef} className="text-muted-foreground tabular-nums">
+                100%
+              </span>
+            </Button>
+            <Button variant="outline" size="icon-sm" onClick={() => void zoomRef.current?.zoomIn(0.25, 200)} aria-label={t.sources.tools.zoomIn}>
               <Plus />
             </Button>
           </div>
@@ -213,29 +271,91 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* Document */}
-        <div ref={viewerRef} className={cn("min-w-0 flex-1 overflow-auto bg-sunken", trayOpen && "hidden lg:block")}>
-          <p className="sticky top-0 z-10 border-b border-border bg-sunken/90 px-4 py-1.5 text-caption text-muted-foreground backdrop-blur-sm" role={error ? "alert" : undefined}>
+        {/* Document: pinch (or ctrl + wheel) zooms, two-finger scroll pans; dragging pans only in the Scroll tool. */}
+        <div className={cn("relative flex min-w-0 flex-1 flex-col bg-sunken", trayOpen && "hidden lg:flex")}>
+          <p className="z-10 shrink-0 border-b border-border bg-sunken px-4 py-1.5 text-caption text-muted-foreground" role={error ? "alert" : undefined}>
             {error ? <span className="text-destructive">{error}</span> : snipMode ? t.sources.tools.snipHint : t.sources.tools.panHint}
           </p>
-          {failed ? (
-            <p role="alert" className="p-10 text-center text-sm text-destructive">
-              {t.sources.fileMissing}
-            </p>
-          ) : !doc ? (
-            <p role="status" className="p-10 text-center text-sm text-muted-foreground">
-              {t.common.loading}
-            </p>
-          ) : (
-            <div className="mx-auto space-y-5 px-4 py-5 sm:px-6" style={{ width: `${zoom * 100}%`, maxWidth: zoom <= 1 ? `${zoom * 60}rem` : undefined }}>
-              {Array.from({ length: doc.pageCount }, (_, i) => i + 1).map((page) => (
-                <div key={page} className="space-y-1.5">
-                  <p className="text-caption text-subtle tabular-nums">{format(t.problem.page, { n: page })}</p>
-                  <SourcePage doc={doc} page={page} scrollRoot={viewerRef} snips={snipsOf(page)} selectedId={selectedId} snipMode={snipMode} labels={pageLabels(page)} onSnip={(p, box, rect) => void snip(p, box, rect)} onSelect={selectFromPage} />
-                </div>
-              ))}
-            </div>
-          )}
+          <div ref={viewerRef} style={{ "--zoom": 1 } as React.CSSProperties} className="relative min-h-0 flex-1 overflow-hidden overscroll-contain">
+            {failed ? (
+              <p role="alert" className="p-10 text-center text-sm text-destructive">
+                {t.sources.fileMissing}
+              </p>
+            ) : !doc ? (
+              <p role="status" className="p-10 text-center text-sm text-muted-foreground">
+                {t.common.loading}
+              </p>
+            ) : (
+              <TransformWrapper
+                ref={zoomRef}
+                minScale={MIN_SCALE}
+                maxScale={MAX_SCALE}
+                initialScale={1}
+                limitToBounds
+                centerZoomedOut
+                smooth
+                // Two-finger scrolling pans the document; only a pinch (ctrl + wheel on macOS) or the buttons zoom.
+                // `step` is per wheel-delta unit in smooth mode, so it is kept tiny: pinch events arrive dozens per second.
+                wheel={{ wheelDisabled: true, step: 0.004 }}
+                pinch={{ step: 5 }}
+                trackPadPanning={{ disabled: false, velocityDisabled: true }}
+                panning={{ disabled: snipMode, velocityDisabled: false }}
+                doubleClick={{ disabled: true }}
+                onTransform={(ref) => {
+                  // Straight to the DOM: this fires every frame while zooming, and must not re-render the pages.
+                  viewerRef.current?.style.setProperty("--zoom", String(ref.state.scale));
+                  if (zoomLabelRef.current) zoomLabelRef.current.textContent = `${Math.round(ref.state.scale * 100)}%`;
+                }}
+              >
+                <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%" }}>
+                  <div className="mx-auto w-full max-w-[60rem] space-y-5 px-4 py-5 sm:px-6">
+                    {Array.from({ length: doc.pageCount }, (_, i) => i + 1).map((page) => (
+                      <div key={page} className="space-y-1.5">
+                        <p className="text-caption text-subtle tabular-nums">{format(t.problem.page, { n: page })}</p>
+                        <SourcePage
+                          doc={doc}
+                          page={page}
+                          scrollRoot={viewerRef}
+                          snips={snipsOf(page)}
+                          pending={pendingOf(page)}
+                          toolbar={toolbar}
+                          selectedId={selectedId}
+                          snipMode={snipMode}
+                          labels={{ ...pageLabels, page: format(t.problem.page, { n: page }), part: (n) => format(t.sources.stitch.part, { n, page: format(t.problem.pageShort, { n: page }) }) }}
+                          onSnip={onRegion}
+                          onSelect={selectFromPage}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </TransformComponent>
+              </TransformWrapper>
+            )}
+          </div>
+
+          {/* Passive status while several regions are waiting; the buttons live beside the newest region. */}
+          <AnimatePresence>
+            {stitching && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 12 }}
+                transition={spring.smooth}
+                role="status"
+                className="pointer-events-none absolute inset-x-3 bottom-3 z-20 mx-auto flex max-w-xl flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-popover/95 px-3.5 py-2 shadow-md backdrop-blur-sm"
+              >
+                <p className="text-sm font-medium tabular-nums">{format(t.sources.stitch.bar, { n: pending.length })}</p>
+                <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                  {ordered.map((region, i) => (
+                    <li key={region.key} className="rounded-full bg-accent px-2.5 py-0.5 text-caption text-accent-foreground tabular-nums">
+                      {format(t.sources.stitch.part, { n: i + 1, page: format(t.problem.pageShort, { n: region.page }) })}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-caption text-subtle">{t.sources.stitch.escape}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Snippets tray */}

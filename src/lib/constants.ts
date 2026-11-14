@@ -170,6 +170,8 @@ export const STORAGE_KEYS = {
   prefs: "vl:prefs",
   activeSubject: "vl:subject",
   sidebar: "vl:sidebar",
+  vaultView: "vl:vault-view",
+  sourcesView: "vl:sources-view",
 } as const;
 
 export function slugify(input: string): string {

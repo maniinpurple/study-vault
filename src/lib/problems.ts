@@ -2,7 +2,7 @@
  * Problems (MistakeCards) as the student sees them — pure helpers shared by the repository, the Sources workspace
  * and the Problem Vault.
  */
-import type { ExamUpload, MistakeCard } from "@/lib/repo/types";
+import type { CropRegion, ExamUpload, MistakeCard } from "@/lib/repo/types";
 import { startOfDay } from "@/lib/stats";
 
 const DAY_MS = 86_400_000;
@@ -30,6 +30,14 @@ export function orderSnips(cards: readonly MistakeCard[], uploadId: string): Mis
         (a.cropBox?.x ?? 0) - (b.cropBox?.x ?? 0) ||
         a.createdAt.getTime() - b.createdAt.getTime(),
     );
+}
+
+/** Every region of a problem on the source pages: one for a normal snip, several for a stitched question. */
+export function cropRegions(card: Pick<MistakeCard, "cropBox">): CropRegion[] {
+  const box = card.cropBox;
+  if (!box) return [];
+  const { more, ...first } = box;
+  return [first, ...(more ?? [])];
 }
 
 export type ReviewStatus = "new" | "learning" | "due" | "scheduled" | "mastered";

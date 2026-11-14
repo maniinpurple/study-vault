@@ -5,6 +5,7 @@
 import { z } from "zod";
 
 import { mappedSuggestionSchema, memorySyncResponseSchema } from "@/lib/brain-prompt";
+import { MAX_STITCH_PARTS } from "@/lib/stitch";
 import { AI_PROVIDERS, FILE_KINDS, LANGUAGES, OCR_STATUSES, SCAN_LIMITS, SYNTHESIS_MODES, TAG_DECLINE_REASONS, THEMES } from "@/lib/constants";
 
 export const idSchema = z.uuid();
@@ -69,7 +70,8 @@ export const newUploadMetaSchema = z.object({
   pageCount: z.number().int().min(1).max(SCAN_LIMITS.maxPdfPages).nullable(),
 });
 
-const cropBox = z.object({ page: z.number().int().min(1).max(SCAN_LIMITS.maxPdfPages), x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) });
+const cropRegion = z.object({ page: z.number().int().min(1).max(SCAN_LIMITS.maxPdfPages), x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) });
+const cropBox = cropRegion.extend({ more: z.array(cropRegion).max(MAX_STITCH_PARTS - 1).optional() });
 
 /** A new problem without its images (those travel as multipart parts). */
 export const newProblemMetaSchema = z.object({

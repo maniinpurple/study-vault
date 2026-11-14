@@ -11,13 +11,15 @@ import { CardDiagram } from "@/components/card-diagram";
 import { StoredImage } from "@/components/stored-image";
 import { CrosshairCard } from "@/components/crosshair-card";
 import { ExperimentalBadge } from "@/components/experimental-badge";
+import { ImageLightbox } from "@/components/image-lightbox";
 import { MathText } from "@/components/math-text";
 import { AttemptLog, RATING_DOT } from "@/components/review/attempt-log";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/field";
+import { Select, Textarea } from "@/components/ui/field";
 import { aiErrorMessage, useSubjectAi } from "@/components/use-subject-ai";
 import { requestMutation } from "@/lib/ai-client";
+import { swatchColor } from "@/lib/constants";
 import { RATINGS, type RatingName } from "@/lib/fsrs";
 import { format, type Dictionary } from "@/lib/i18n";
 import type { MistakeCard, Subject } from "@/lib/repo/types";
@@ -50,7 +52,8 @@ export function ReviewArena() {
   const queue = buildReviewQueue(snapshot.cards, now, { subjectId: scopeSubject?.id ?? null, utcOffsetMinutes: offset, learnAheadMinutes: studyAhead ? 24 * 60 : undefined });
   const counts = dueCountsBySubject(snapshot.cards, now, offset);
 
-  const pinned = pinnedId ? (snapshot.cards.find((c) => c.id === pinnedId) ?? null) : null;
+  // A card pinned mid-review (answer shown, note typed) stays on screen — but never across a subject filter change.
+  const pinned = pinnedId ? (snapshot.cards.find((c) => c.id === pinnedId && c.archivedAt === null && (!scopeSubject || c.subjectId === scopeSubject.id)) ?? null) : null;
   const current = pinned ?? queue.ready[0] ?? null;
   const waiting = !current && queue.later.length > 0;
 
@@ -76,6 +79,22 @@ export function ReviewArena() {
           <div className="space-y-1">
             <h1 className="text-display">{t.review.title}</h1>
             <p className="max-w-xl text-muted-foreground">{t.review.subtitle}</p>
+            <div className="flex items-center gap-2 pt-1.5">
+              <label htmlFor="review-subject" className="text-sm text-muted-foreground">
+                {t.review.scope}
+              </label>
+              <span className="relative">
+                {scopeSubject && <span className="pointer-events-none absolute top-1/2 left-3 size-2 -translate-y-1/2 rounded-full" style={{ backgroundColor: swatchColor(scopeSubject.color) ?? "var(--subtle-foreground)" }} aria-hidden />}
+                <Select id="review-subject" value={scopeSubject?.id ?? ""} onChange={(e) => actions.setActiveSubject(e.target.value || null)} className={cn("h-9 w-auto min-w-48 font-medium", scopeSubject && "pl-7")}>
+                  <option value="">{t.subjects.all}</option>
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} · {counts.get(s.id) ?? 0}
+                    </option>
+                  ))}
+                </Select>
+              </span>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs" aria-live="polite">
             <Badge className="tabular-nums">{format(t.review.dueNow, { n: queue.ready.length })}</Badge>
@@ -83,26 +102,6 @@ export function ReviewArena() {
             {reviewed.count > 0 && <Badge variant="outline" className="tabular-nums">{format(t.review.progress, { done: reviewed.count, left: queue.ready.length + queue.later.length })}</Badge>}
           </div>
         </header>
-
-        {!scopeSubject && counts.size > 0 && (
-          <ul className="flex flex-wrap gap-2" aria-label={t.subjects.title}>
-            {subjects
-              .filter((s) => counts.has(s.id))
-              .map((s) => (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={() => actions.setActiveSubject(s.id)}
-                    className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs transition-colors outline-none hover:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    <span className="size-2 rounded-full" style={{ backgroundColor: s.color ?? "var(--primary)" }} aria-hidden />
-                    {s.name}
-                    <span className="tabular-nums font-semibold">{counts.get(s.id)}</span>
-                  </button>
-                </li>
-              ))}
-          </ul>
-        )}
 
         <TagSuggestionBanner subjectId={scopeSubject?.id ?? null} />
 
@@ -121,7 +120,6 @@ export function ReviewArena() {
               <ReviewCard
                 card={current}
                 subject={subjects.find((s) => s.id === current.subjectId) ?? null}
-                now={now}
                 onPin={() => setPinnedId(current.id)}
                 onGraded={({ attemptNumber, dueAfter, reviewedAt }) => {
                   setPinnedId(null);
@@ -185,14 +183,13 @@ export function ReviewArena() {
 interface CardProps {
   card: MistakeCard;
   subject: Subject | null;
-  now: Date;
   onPin: () => void;
   onGraded: (result: { attemptNumber: number; dueAfter: Date; reviewedAt: Date }) => void;
 }
 
 /** One card in the arena. Mounted per card (keyed), so reveal/variant/note state resets between cards. */
-function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
-  const { snapshot, user, t, locale, actions } = useVault();
+function ReviewCard({ card, subject, onPin, onGraded }: CardProps) {
+  const { snapshot, t, locale, actions } = useVault();
   const ai = useSubjectAi(subject);
   const [revealed, setRevealed] = React.useState(false);
   const [note, setNote] = React.useState("");
@@ -203,6 +200,7 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
   const [grading, setGrading] = React.useState<RatingName | null>(null);
   const [gradeError, setGradeError] = React.useState<string | null>(null);
   const [solutionDraft, setSolutionDraft] = React.useState<string | null>(null);
+  const [zoomed, setZoomed] = React.useState(false);
   const shownAt = React.useRef(0);
   const abortRef = React.useRef<AbortController | null>(null);
   const noteId = React.useId();
@@ -215,7 +213,7 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
 
   const attempts = attemptHistory(card.id, snapshot.logs);
   const nextAttempt = card.attemptCount + 1;
-  const intervals = previewIntervals(card, now, user);
+  const intervals = previewIntervals();
   const topic = card.topicId ? snapshot.topics.find((tp) => tp.id === card.topicId) : null;
   const subjectTags = tagsForSubject(snapshot.tags, card.subjectId);
   const cardTagIds = new Set(snapshot.cardTags.filter((l) => l.cardId === card.id).map((l) => l.tagId));
@@ -316,7 +314,7 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+    <div className={cn("grid gap-5", hasText ? "lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]")}>
       {/* ── Question face ─────────────────────────────────────────── */}
       <CrosshairCard glow className="min-w-0 space-y-4 self-start p-5 sm:p-6">
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -342,9 +340,10 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
           </div>
         ) : (
           hasText ? <MathText text={card.questionLatex} className="text-reading" /> : (
-            <div className="overflow-hidden rounded-md border border-border bg-white">
-              <StoredImage path={card.originalCropPath} alt={t.problem.imageAlt} className="mx-auto block max-h-[28rem] w-auto max-w-full" />
-            </div>
+            <button type="button" onClick={() => setZoomed(true)} aria-label={`${t.problem.imageAlt}. ${t.review.zoomImage}`} className="group/image relative block w-full cursor-zoom-in overflow-hidden rounded-md border border-border bg-white">
+              <StoredImage path={card.originalCropPath} alt="" className="mx-auto block max-h-[72vh] min-h-48 w-full object-contain" />
+              <span className="absolute right-2 bottom-2 rounded-full bg-popover/90 px-2.5 py-1 text-caption opacity-0 shadow-xs transition-opacity group-hover/image:opacity-100 group-focus-visible/image:opacity-100">{t.review.zoomImage}</span>
+            </button>
           )
         )}
         <CardDiagram path={card.diagramImagePath} alt={t.review.figure} caption={t.review.figure} />
@@ -511,6 +510,7 @@ function ReviewCard({ card, subject, now, onPin, onGraded }: CardProps) {
       ) : (
         <div className="hidden lg:block" aria-hidden />
       )}
+      <ImageLightbox open={zoomed} onClose={() => setZoomed(false)} path={card.originalCropPath} alt={t.problem.imageAlt} />
     </div>
   );
 }

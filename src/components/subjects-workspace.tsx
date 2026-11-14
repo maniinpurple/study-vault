@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { swatchColor } from "@/lib/constants";
 import { format } from "@/lib/i18n";
-import { startOfDay, timezoneOffsetMinutes } from "@/lib/stats";
 import type { Topic } from "@/lib/repo/types";
 
 /** Add / rename form: a single text input with confirm + cancel. */
@@ -84,7 +83,7 @@ function TopicRow({ topic, count, isChapter, children }: { topic: Topic; count: 
 }
 
 export function SubjectsWorkspace() {
-  const { snapshot, activeSubjectId, actions, t, loadedAt, user } = useVault();
+  const { snapshot, activeSubjectId, actions, t } = useVault();
   const [editing, setEditing] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
@@ -92,7 +91,6 @@ export function SubjectsWorkspace() {
 
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const subject = subjects.find((s) => s.id === activeSubjectId) ?? null;
-  const offset = timezoneOffsetMinutes(user.timezone, loadedAt);
 
   const topics = snapshot.topics.filter((tp) => tp.subjectId === subject?.id);
   const chapters = topics.filter((tp) => tp.parentId === null);
@@ -145,7 +143,6 @@ export function SubjectsWorkspace() {
     );
   }
 
-  const daysToExam = subject.examDate ? Math.ceil((subject.examDate.getTime() - startOfDay(loadedAt, offset).getTime()) / 86_400_000) : null;
 
   return (
     <div className="space-y-6">
@@ -166,7 +163,6 @@ export function SubjectsWorkspace() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{t.subjects.aiLanguage}: {subject.aiOutputLanguage ? t.language[subject.aiOutputLanguage] : t.subjects.followDefault}</Badge>
-          {daysToExam !== null && <Badge variant="secondary" className="tabular-nums">{daysToExam >= 0 ? format(t.subjects.examIn, { n: daysToExam }) : t.subjects.examPassed}</Badge>}
           <Badge variant={subject.memoryStale ? "outline" : "secondary"}>{subject.memoryStale ? t.subjects.memoryStale : t.subjects.memoryFresh}</Badge>
         </div>
       </CrosshairCard>

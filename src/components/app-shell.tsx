@@ -9,6 +9,7 @@ import * as React from "react";
 import { AccountMenu } from "@/components/account-menu";
 import { useApp } from "@/components/app-provider";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { Scratchpad } from "@/components/scratchpad";
 import { SubjectDialog } from "@/components/subject-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Button } from "@/components/ui/button";
@@ -218,6 +219,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </AnimatePresence>
       </div>
+      {/* Global: one scratchpad for every page, so a drawing survives navigation. */}
+      <Scratchpad />
     </MotionConfig>
   );
 }

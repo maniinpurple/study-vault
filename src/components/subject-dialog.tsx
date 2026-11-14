@@ -10,8 +10,6 @@ import { SUBJECT_COLORS, type Language } from "@/lib/constants";
 import type { Subject } from "@/lib/repo/types";
 import { cn } from "@/lib/utils";
 
-const toDateInput = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
-
 /** Create (subject = undefined) or edit a subject. */
 export function SubjectDialog({ open, onClose, subject }: { open: boolean; onClose: () => void; subject?: Subject }) {
   const { t } = useApp();
@@ -28,7 +26,6 @@ function SubjectForm({ onClose, subject }: { onClose: () => void; subject?: Subj
   const [name, setName] = React.useState(subject?.name ?? "");
   const [description, setDescription] = React.useState(subject?.description ?? "");
   const [color, setColor] = React.useState<string>(subject?.color ?? SUBJECT_COLORS[0]);
-  const [examDate, setExamDate] = React.useState(toDateInput(subject?.examDate ?? null));
   const [language, setLanguage] = React.useState<Language | "">(subject?.aiOutputLanguage ?? "");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -44,7 +41,6 @@ function SubjectForm({ onClose, subject }: { onClose: () => void; subject?: Subj
         description: description.trim() || null,
         color,
         aiOutputLanguage: language === "" ? null : language,
-        examDate: examDate ? new Date(`${examDate}T00:00:00.000Z`) : null,
       };
       if (subject) await actions.updateSubject(subject.id, values);
       else await actions.createSubject(values);
@@ -79,18 +75,13 @@ function SubjectForm({ onClose, subject }: { onClose: () => void; subject?: Subj
             ))}
           </div>
         </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={`${t.subjects.examDate} (${t.common.optional})`} htmlFor={`${formId}-exam`}>
-            <Input id={`${formId}-exam`} type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} className="tabular-nums" />
-          </Field>
-          <Field label={t.subjects.aiLanguage} htmlFor={`${formId}-lang`} hint={t.subjects.aiLanguageHint}>
-            <Select id={`${formId}-lang`} value={language} onChange={(e) => setLanguage(e.target.value as Language | "")}>
-              <option value="">{t.subjects.followDefault}</option>
-              <option value="VI">{t.language.VI}</option>
-              <option value="EN">{t.language.EN}</option>
-            </Select>
-          </Field>
-        </div>
+        <Field label={t.subjects.aiLanguage} htmlFor={`${formId}-lang`} hint={t.subjects.aiLanguageHint}>
+          <Select id={`${formId}-lang`} value={language} onChange={(e) => setLanguage(e.target.value as Language | "")}>
+            <option value="">{t.subjects.followDefault}</option>
+            <option value="VI">{t.language.VI}</option>
+            <option value="EN">{t.language.EN}</option>
+          </Select>
+        </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" size="lg" onClick={onClose}>
             {t.common.cancel}

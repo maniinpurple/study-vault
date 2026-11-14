@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { attemptHistory, buildReviewQueue, cleanNote, dueCountsBySubject, intervalParts, previewIntervals, scheduleReview } from "@/lib/review";
+import { attemptHistory, buildReviewQueue, cleanNote, dueCountsBySubject, intervalParts, previewIntervals, REVIEW_INTERVAL_DAYS, scheduleReview } from "@/lib/review";
 
 import { card, daysFrom, log, T0 } from "./helpers/fixtures";
 
@@ -44,27 +44,38 @@ describe("buildReviewQueue", () => {
   });
 });
 
-describe("FSRS grading helpers", () => {
+describe("logic-problem grading intervals", () => {
   const review = card("r", { state: "REVIEW", due: T0, stability: 10, difficulty: 5, reps: 4, lastReviewAt: daysFrom(T0, -10), scheduledDays: 10 });
+  const DAY = 86_400_000;
 
-  it("previews monotonic intervals and matches the stored outcome exactly", () => {
-    const at = T0;
-    const preview = previewIntervals(review, at, user);
-    expect(preview.AGAIN).toBeLessThan(preview.HARD);
-    expect(preview.HARD).toBeLessThanOrEqual(preview.GOOD);
-    expect(preview.GOOD).toBeLessThan(preview.EASY);
-    for (const rating of ["AGAIN", "HARD", "GOOD", "EASY"] as const) {
-      const { card: next, log: fsrsLog } = scheduleReview(review, rating, at, user);
-      expect(next.due.getTime() - at.getTime()).toBe(preview[rating]);
-      expect(fsrsLog.rating).toBe(rating);
-      expect(fsrsLog.dueBefore.getTime()).toBe(review.due.getTime());
-    }
-    expect(scheduleReview(review, "AGAIN", at, user).card.lapses).toBe(review.lapses + 1);
+  it("uses fixed day intervals: Quên 1, Khó 3, Nhớ 7, Dễ 14", () => {
+    expect(REVIEW_INTERVAL_DAYS).toEqual({ AGAIN: 1, HARD: 3, GOOD: 7, EASY: 14 });
+    expect(previewIntervals()).toEqual({ AGAIN: DAY, HARD: 3 * DAY, GOOD: 7 * DAY, EASY: 14 * DAY });
   });
-  it("sends a failed new card into a minutes-long learning step", () => {
+  it("stores exactly what the buttons preview, whatever the card's history", () => {
+    const preview = previewIntervals();
+    for (const base of [review, card("fresh"), card("relearning", { state: "RELEARNING", due: T0, stability: 1, lastReviewAt: daysFrom(T0, -1) })]) {
+      for (const rating of ["AGAIN", "HARD", "GOOD", "EASY"] as const) {
+        const { card: next, log: fsrsLog } = scheduleReview(base, rating, T0, user);
+        expect(next.due.getTime() - T0.getTime()).toBe(preview[rating]);
+        expect(fsrsLog.dueAfter.getTime()).toBe(next.due.getTime());
+        expect(next.state).toBe("REVIEW"); // no minutes-long learning steps for logic problems
+        expect(next.learningSteps).toBe(0);
+        expect(next.scheduledDays).toBe(REVIEW_INTERVAL_DAYS[rating]);
+        expect(fsrsLog).toMatchObject({ rating, stateAfter: "REVIEW", scheduledDays: REVIEW_INTERVAL_DAYS[rating] });
+        expect(fsrsLog.dueBefore.getTime()).toBe(base.due.getTime());
+      }
+    }
+  });
+  it("still lets FSRS track lapses, and a failed NEW card comes back tomorrow, not in a minute", () => {
+    expect(scheduleReview(review, "AGAIN", T0, user).card.lapses).toBe(review.lapses + 1);
     const { card: next } = scheduleReview(card("n"), "AGAIN", T0, user);
-    expect(next.state).toBe("LEARNING");
-    expect(next.due.getTime() - T0.getTime()).toBe(60_000);
+    expect(next.due.getTime() - T0.getTime()).toBe(DAY);
+  });
+  it("labels the intervals in whole days", () => {
+    expect(Object.values(previewIntervals()).map((ms) => intervalParts(ms))).toEqual([
+      { unit: "day", n: 1 }, { unit: "day", n: 3 }, { unit: "day", n: 7 }, { unit: "day", n: 14 },
+    ]);
   });
 });
 

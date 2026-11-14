@@ -1,7 +1,7 @@
 "use client";
 
 import { LayoutGroup, motion } from "framer-motion";
-import { Flag, ImagePlus, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Flag, ImagePlus, Plus, Search, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -10,10 +10,13 @@ import { MathText } from "@/components/math-text";
 import { Modal } from "@/components/modal";
 import { AutosaveField, ProblemFields } from "@/components/problems/problem-fields";
 import { StoredImage } from "@/components/stored-image";
+import { ProblemBox, ProblemRow, ProblemRowHeader, ProblemTile } from "@/components/vault/problem-views";
 import { Button } from "@/components/ui/button";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import { useObjectUrl } from "@/components/use-object-url";
-import { swatchColor } from "@/lib/constants";
+import { useStoredChoice } from "@/components/use-stored-choice";
+import { ViewToggle } from "@/components/view-toggle";
+import { STORAGE_KEYS } from "@/lib/constants";
 import { format } from "@/lib/i18n";
 import { topicPath } from "@/lib/lab";
 import { spring } from "@/lib/motion";
@@ -22,10 +25,9 @@ import type { MistakeCard } from "@/lib/repo/types";
 import { groupTopics } from "@/lib/scan-session";
 import { timezoneOffsetMinutes } from "@/lib/stats";
 import { tagDisplayName } from "@/lib/tags";
+import { VIEW_MODES, type ViewMode } from "@/lib/view-mode";
 import { cn } from "@/lib/utils";
 import { filterProblems, groupProblems, sortProblems, VAULT_GROUPS, VAULT_SORTS, type TimeBucket, type VaultGroup, type VaultSort } from "@/lib/vault";
-
-const STATUS_DOT: Record<ReviewStatus, string> = { due: "bg-destructive", new: "bg-brand", learning: "bg-warning", scheduled: "bg-subtle", mastered: "bg-success" };
 
 export function VaultView() {
   const { snapshot, user, t, loadedAt, activeSubjectId } = useVault();
@@ -36,6 +38,7 @@ export function VaultView() {
   const [priorityOnly, setPriorityOnly] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [adding, setAdding] = React.useState(false);
+  const [view, setView] = useStoredChoice<ViewMode>(STORAGE_KEYS.vaultView, VIEW_MODES, "box");
 
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const scope = subjects.find((s) => s.id === activeSubjectId) ?? null;
@@ -130,10 +133,13 @@ export function VaultView() {
               </div>
             </LayoutGroup>
           </div>
-          <p className="text-caption text-subtle tabular-nums" aria-live="polite">
-            {filtered ? `${visible.length} / ` : ""}
-            {format(t.vault.count, { n: total })}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-caption text-subtle tabular-nums" aria-live="polite">
+              {filtered ? `${visible.length} / ` : ""}
+              {format(t.vault.count, { n: total })}
+            </p>
+            <ViewToggle id="vault-view" label={t.common.view.label} value={view} modes={VIEW_MODES} labels={t.common.view} onChange={setView} />
+          </div>
         </div>
       </div>
 
@@ -151,13 +157,20 @@ export function VaultView() {
                 <span className="text-caption text-subtle tabular-nums">{section.cards.length}</span>
                 <span className="h-px flex-1 bg-border" aria-hidden />
               </div>
-              <ul className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {section.cards.map((card) => (
-                  <li key={card.id}>
-                    <VaultCard card={card} status={reviewStatus(card, ctx.now, ctx.utcOffsetMinutes)} onEdit={() => setEditingId(card.id)} />
-                  </li>
-                ))}
+              <div className={cn(view === "list" && "overflow-hidden rounded-lg border border-border bg-card shadow-xs")}>
+              {view === "list" && <ProblemRowHeader />}
+              <ul className={cn(view === "box" && "grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3", view === "grid" && "grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4", view === "list" && "divide-y divide-border")}>
+                {section.cards.map((card) => {
+                  const status = reviewStatus(card, ctx.now, ctx.utcOffsetMinutes);
+                  const onEdit = () => setEditingId(card.id);
+                  return (
+                    <li key={card.id}>
+                      {view === "grid" ? <ProblemTile card={card} status={status} onEdit={onEdit} /> : view === "list" ? <ProblemRow card={card} status={status} onEdit={onEdit} /> : <ProblemBox card={card} status={status} onEdit={onEdit} />}
+                    </li>
+                  );
+                })}
               </ul>
+              </div>
             </section>
           ))}
         </div>
@@ -170,75 +183,6 @@ export function VaultView() {
         <NewProblemForm defaultSubjectId={scope?.id ?? subjects[0]?.id ?? null} onClose={() => setAdding(false)} />
       </Modal>
     </div>
-  );
-}
-
-/** One problem: the question (image or formatted text), then its solution and takeaway, always together. */
-function VaultCard({ card, status, onEdit }: { card: MistakeCard; status: ReviewStatus; onEdit: () => void }) {
-  const { snapshot, t } = useVault();
-  const subject = snapshot.subjects.find((s) => s.id === card.subjectId);
-  const source = card.examUploadId ? snapshot.examUploads.find((u) => u.id === card.examUploadId) : null;
-  const tagIds = new Set(snapshot.cardTags.filter((l) => l.cardId === card.id).map((l) => l.tagId));
-  const tags = snapshot.tags.filter((tag) => tagIds.has(tag.id));
-  const hasText = card.questionLatex.trim().length > 0;
-
-  return (
-    <article className="group overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-px hover:shadow-md">
-      <header className="flex items-center gap-2 py-1.5 pr-1.5 pl-3.5 text-caption text-muted-foreground">
-        <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: swatchColor(subject?.color) ?? "var(--subtle-foreground)" }} aria-hidden />
-        <span className="min-w-0 flex-1 truncate">
-          {subject?.name}
-          {source && ` · ${source.title}`}
-          {card.sourcePage !== null && source && ` · ${format(t.problem.pageShort, { n: card.sourcePage })}`}
-        </span>
-        {card.isHighYield && <span className="shrink-0 rounded-full bg-mark-soft px-2 py-0.5 font-medium text-mark-foreground">{t.problem.priority}</span>}
-        <Button variant="ghost" size="icon-sm" onClick={onEdit} aria-label={t.common.edit} title={t.common.edit}>
-          <Pencil />
-        </Button>
-      </header>
-
-      <div className="border-y border-border">
-        {hasText ? (
-          <MathText text={card.questionLatex} className="max-h-72 overflow-y-auto p-3.5 text-reading" />
-        ) : (
-          <div className="bg-white">
-            <StoredImage path={card.originalCropPath} alt={t.problem.imageAlt} className="mx-auto block max-h-72 w-auto max-w-full" />
-          </div>
-        )}
-        {hasText && card.diagramImagePath && (
-          <div className="border-t border-border bg-white">
-            <StoredImage path={card.diagramImagePath} alt={t.review.figure} className="mx-auto block max-h-56 w-auto max-w-full" />
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-3 p-3.5">
-        <div className="space-y-1">
-          <h3 className="text-caption font-medium text-muted-foreground">{t.problem.solution}</h3>
-          {card.correctAnswerLatex && <MathText text={card.correctAnswerLatex} className="text-reading" />}
-          {card.solutionLatex ? <MathText text={card.solutionLatex} className="text-reading" /> : !card.correctAnswerLatex && <p className="text-sm text-subtle">{t.vault.noSolution}</p>}
-        </div>
-        {card.ahaNote && (
-          <div className="space-y-1 border-l-2 border-mark pl-3">
-            <h3 className="text-caption font-medium text-muted-foreground">{t.problem.takeaway}</h3>
-            <MathText text={card.ahaNote} className="text-sm" />
-          </div>
-        )}
-        <footer className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1 text-caption text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className={cn("size-1.5 rounded-full", STATUS_DOT[status])} aria-hidden />
-            {t.problem.status[status]}
-          </span>
-          {card.attemptCount > 0 && <span className="tabular-nums">{format(t.problem.attempts, { n: card.attemptCount })}</span>}
-          {tags.map((tag) => (
-            <span key={tag.id} className="flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full" style={{ backgroundColor: swatchColor(tag.color) ?? "var(--subtle-foreground)" }} aria-hidden />
-              {tagDisplayName(t, tag)}
-            </span>
-          ))}
-        </footer>
-      </div>
-    </article>
   );
 }
 

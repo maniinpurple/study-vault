@@ -1,6 +1,11 @@
 /**
- * FSRS Review Arena — pure session logic (zero AI tokens). The arena UI and the repository both go through here,
- * so the buttons' previewed intervals and the stored result always agree.
+ * Review — pure session logic (zero AI tokens). The review UI and the repository both go through here, so the buttons'
+ * previewed intervals and the stored result always agree.
+ *
+ * Scheduling is tuned for LOGIC problems, not vocabulary: to test whether you can *solve* a problem again you must first
+ * have forgotten its specific numbers, so there are no minutes-long learning steps. Each grade maps to a fixed number of
+ * days (`REVIEW_INTERVAL_DAYS`). FSRS still runs underneath to keep stability / difficulty / lapses up to date (they feed
+ * the weakness ranking and the "mastered" statistic), but it no longer decides when a card comes back.
  */
 import { FSRS, RATINGS, type FsrsCard, type RatingName, type SchedulingResult } from "@/lib/fsrs";
 import type { CardAttemptLog, MistakeCard, User } from "@/lib/repo/types";
@@ -9,7 +14,11 @@ import { startOfDay, timezoneOffsetMinutes } from "@/lib/stats";
 const DAY_MS = 86_400_000;
 const MINUTE_MS = 60_000;
 
-/** Learning cards due within this window are shown now (Anki-style "learn ahead"). */
+/** Days until a problem returns, by grade: Quên 1, Khó 3, Nhớ 7, Dễ 14. */
+export const REVIEW_INTERVAL_DAYS: Readonly<Record<RatingName, number>> = { AGAIN: 1, HARD: 3, GOOD: 7, EASY: 14 };
+
+/** Learning cards due within this window are shown now (Anki-style "learn ahead"). Only cards graded before the
+ *  day-based intervals existed can still be in a (re)learning step. */
 export const LEARN_AHEAD_MINUTES = 20;
 
 /** FSRS scheduler configured with the user's retention target and local day boundary at `at`. */
@@ -22,15 +31,23 @@ export function toFsrsCard(card: MistakeCard): FsrsCard {
   return { state, due, stability, difficulty, elapsedDays, scheduledDays, learningSteps, reps, lapses, lastReviewAt };
 }
 
-/** Outcome of grading `card` with `rating` at `at`. Pure. */
+/**
+ * Outcome of grading `card` with `rating` at `at`. Pure. FSRS updates the memory model (stability, difficulty, lapses,
+ * reps); the return date and state come from `REVIEW_INTERVAL_DAYS`, and a graded card is always in the REVIEW state.
+ */
 export function scheduleReview(card: MistakeCard, rating: RatingName, at: Date, user: Pick<User, "desiredRetention" | "timezone">): SchedulingResult {
-  return schedulerFor(user, at).next(toFsrsCard(card), at, rating);
+  const base = schedulerFor(user, at).next(toFsrsCard(card), at, rating);
+  const days = REVIEW_INTERVAL_DAYS[rating];
+  const due = new Date(at.getTime() + days * DAY_MS);
+  return {
+    card: { ...base.card, state: "REVIEW", due, scheduledDays: days, learningSteps: 0 },
+    log: { ...base.log, stateAfter: "REVIEW", dueAfter: due, scheduledDays: days, learningSteps: 0 },
+  };
 }
 
-/** Milliseconds until the card would be due again, for each rating (labels on the four buttons). */
-export function previewIntervals(card: MistakeCard, at: Date, user: Pick<User, "desiredRetention" | "timezone">): Record<RatingName, number> {
-  const preview = schedulerFor(user, at).preview(toFsrsCard(card), at);
-  return Object.fromEntries(RATINGS.map((r) => [r, preview[r].card.due.getTime() - at.getTime()])) as Record<RatingName, number>;
+/** Milliseconds until the card comes back, for each rating (the labels on the four buttons). */
+export function previewIntervals(): Record<RatingName, number> {
+  return Object.fromEntries(RATINGS.map((r) => [r, REVIEW_INTERVAL_DAYS[r] * DAY_MS])) as Record<RatingName, number>;
 }
 
 export type IntervalUnit = "minute" | "hour" | "day" | "month" | "year";
