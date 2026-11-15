@@ -158,7 +158,7 @@ export function ReviewArena() {
                     <Link
                       href="/subjects"
                       onClick={() => actions.setActiveSubject(staleSubjects[0].id)}
-                      className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+                      className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-brand outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
                     >
                       {t.review.openSubject}
                     </Link>
@@ -376,7 +376,7 @@ function ReviewCard({ card, subject, onPin, onGraded }: CardProps) {
         </div>
         {!variant && !mutating && <p className="text-xs text-muted-foreground">{ai.key ? t.review.mutateHint : t.ai.noKey}</p>}
         {mutateError && <p role="alert" className="text-sm text-destructive">{mutateError}</p>}
-        <p className="hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:flex">
+        <p className="hidden items-center gap-1.5 text-[12px] text-muted-foreground sm:flex">
           {t.review.shortcuts}
         </p>
       </CrosshairCard>
@@ -400,7 +400,7 @@ function ReviewCard({ card, subject, onPin, onGraded }: CardProps) {
               <h3 className="text-xs font-semibold">{t.review.solution}</h3>
               {card.correctAnswerLatex && (
                 <div className="rounded-lg border border-primary/30 bg-accent/40 p-2.5">
-                  <p className="text-[11px] font-medium text-muted-foreground">{t.review.correctAnswer}</p>
+                  <p className="text-[12px] font-medium text-muted-foreground">{t.review.correctAnswer}</p>
                   <MathText text={card.correctAnswerLatex} />
                 </div>
               )}
@@ -416,7 +416,7 @@ function ReviewCard({ card, subject, onPin, onGraded }: CardProps) {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Textarea value={solutionDraft} onChange={(e) => setSolutionDraft(e.target.value)} placeholder={t.review.solutionPlaceholder} rows={3} className="tabular-nums text-[13px]" aria-label={t.review.addSolution} />
+                    <Textarea value={solutionDraft} onChange={(e) => setSolutionDraft(e.target.value)} placeholder={t.review.solutionPlaceholder} rows={3} className="tabular-nums text-[14px]" aria-label={t.review.addSolution} />
                     {solutionDraft.trim() && <MathText text={solutionDraft} className="rounded-lg border border-border p-2" />}
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setSolutionDraft(null)}>{t.common.cancel}</Button>
@@ -429,13 +429,13 @@ function ReviewCard({ card, subject, onPin, onGraded }: CardProps) {
               <section className="grid gap-2 sm:grid-cols-2">
                 {card.ahaNote && (
                   <div className="rounded-lg border border-border bg-muted/30 p-2.5">
-                    <p className="text-[11px] font-medium text-muted-foreground">{t.review.ahaNote}</p>
+                    <p className="text-[12px] font-medium text-muted-foreground">{t.review.ahaNote}</p>
                     <MathText text={card.ahaNote} />
                   </div>
                 )}
                 {card.highYieldNote && (
                   <div className="rounded-lg border border-border bg-muted/30 p-2.5">
-                    <p className="text-[11px] font-medium text-muted-foreground">{t.review.teacherNote}</p>
+                    <p className="text-[12px] font-medium text-muted-foreground">{t.review.teacherNote}</p>
                     <MathText text={card.highYieldNote} />
                   </div>
                 )}
@@ -500,7 +500,7 @@ function ReviewCard({ card, subject, onPin, onGraded }: CardProps) {
                     <span className="flex w-full items-center gap-1.5 text-sm leading-snug font-medium">
                       <span className={cn("size-2 shrink-0 rounded-full", RATING_DOT[rating])} aria-hidden />
                       <span className="min-w-0 flex-1">{t.review.ratings[rating]}</span>
-                      <kbd className="hidden rounded border border-border px-1 font-mono text-[10px] text-subtle sm:inline">{i + 1}</kbd>
+                      <kbd className="hidden rounded border border-border px-1 font-mono text-[12px] text-subtle sm:inline">{i + 1}</kbd>
                     </span>
                     <span className="tabular-nums text-xs text-muted-foreground">{grading === rating ? <Loader2 className="size-3 animate-spin" aria-hidden /> : intervalLabel(t, locale, intervals[rating])}</span>
                   </button>

@@ -81,7 +81,7 @@ export function SubjectTagsPanel({ subject }: { subject: Subject }) {
             <span>{tagDisplayName(t, tag)}</span>
             <span className="tabular-nums text-xs text-muted-foreground">{format(t.adaptive.uses, { n: uses(tag.id) })}</span>
             {tag.origin !== "USER" && (
-              <Badge variant={tag.origin === "AI_ACCEPTED" ? "default" : "outline"} className="text-[10px]">
+              <Badge variant={tag.origin === "AI_ACCEPTED" ? "default" : "outline"} className="text-[14px]">
                 {tag.origin === "AI_ACCEPTED" ? t.adaptive.aiTag : t.adaptive.base}
               </Badge>
             )}

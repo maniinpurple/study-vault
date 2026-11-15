@@ -15,7 +15,7 @@ function initials(user: Pick<User, "displayName" | "email">): string {
 }
 
 /** The signed-in account: who you are, and the way out. There is exactly one account per session. */
-export function AccountMenu() {
+export function AccountMenu({ side = "top" }: { side?: "top" | "bottom" }) {
   const { snapshot, t } = useApp();
   const user = snapshot?.user;
   if (!user) return null;
@@ -23,11 +23,11 @@ export function AccountMenu() {
   return (
     <Dropdown
       className="w-64"
-      side="top"
-      align="start"
+      side={side}
+      align={side === "top" ? "start" : "end"}
       trigger={({ open, toggle, id }) => (
         <button type="button" onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} aria-label={`${t.header.account}: ${user.displayName ?? user.email}`} className="rounded-full">
-          <span className="grid size-8 place-items-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground" aria-hidden>
+          <span className="grid size-8 place-items-center rounded-full bg-primary text-[12px] font-semibold text-primary-foreground" aria-hidden>
             {initials(user)}
           </span>
         </button>

@@ -53,7 +53,7 @@ export function ProblemTile({ card, status, onEdit }: ViewProps) {
       <span className="relative block h-32 overflow-hidden border-y border-border bg-white">
         {hasText ? (
           <span className="block h-full bg-card p-3">
-            <MathText text={card.questionLatex} className="line-clamp-6 text-[13px] leading-[1.45]" />
+            <MathText text={card.questionLatex} className="line-clamp-6 text-[14px] leading-[1.45]" />
           </span>
         ) : (
           <StoredImage fill path={card.originalCropPath} alt={t.problem.imageAlt} className="object-cover object-top" />
@@ -92,7 +92,7 @@ export function ProblemRow({ card, status, onEdit }: ViewProps) {
     <button type="button" onClick={onEdit} className={cn("grid w-full items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-muted", ROW_COLUMNS)}>
       <span className="flex min-w-0 items-center gap-3">
         {hasText ? (
-          <MathText text={card.questionLatex} className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-[1.45]" />
+          <MathText text={card.questionLatex} className="line-clamp-2 min-w-0 flex-1 text-[14px] leading-[1.45]" />
         ) : (
           <span className="relative h-10 w-16 shrink-0 overflow-hidden rounded border border-border bg-white">
             <StoredImage fill path={card.originalCropPath} alt={t.problem.imageAlt} className="object-cover object-top" />

@@ -98,7 +98,7 @@ export function Scratchpad() {
     canvas.current?.eraseMode(next === "eraser");
   }
 
-  const segment = (active: boolean) => cn("h-7 rounded-md px-3 text-[13px] transition-colors", active ? "bg-card font-medium text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground");
+  const segment = (active: boolean) => cn("h-7 rounded-md px-3 text-[14px] transition-colors", active ? "bg-card font-medium text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground");
 
   return (
     // Covers the screen but takes no clicks itself: only the button and the window below are interactive.
@@ -125,10 +125,10 @@ export function Scratchpad() {
             aria-modal={false}
             aria-label={t.scratchpad.title}
             onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
-            className="flex size-full animate-in flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-lg duration-150 fade-in zoom-in-95"
+            className="flex size-full animate-in flex-col overflow-hidden rounded-xl border-2 border-border bg-popover shadow-lg duration-150 fade-in zoom-in-95"
           >
             {/* Drag handle */}
-            <header className="scratch-drag flex shrink-0 cursor-grab items-center gap-2 border-b border-border px-3 py-2 select-none active:cursor-grabbing">
+            <header className="scratch-drag flex shrink-0 cursor-grab items-center gap-2 border-b-2 border-border px-3 py-2 select-none active:cursor-grabbing">
               <h2 className="mr-auto truncate text-heading" title={t.scratchpad.hint}>
                 {t.scratchpad.title}
               </h2>
@@ -211,7 +211,7 @@ export function Scratchpad() {
         aria-expanded={open}
         aria-label={t.scratchpad.open}
         title={t.scratchpad.open}
-        className="pointer-events-auto absolute right-4 bottom-4 grid size-12 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:-translate-y-px active:scale-95 sm:right-6 sm:bottom-6"
+        className="pointer-events-auto absolute right-4 bottom-4 grid size-12 place-items-center rounded-full border-2 border-border bg-primary text-primary-foreground shadow-md transition-transform hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:right-6 sm:bottom-6"
       >
         <Pencil className="size-5" aria-hidden />
       </button>

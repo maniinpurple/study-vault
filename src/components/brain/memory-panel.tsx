@@ -77,7 +77,7 @@ export function MemoryPanel({ subject }: { subject: Subject }) {
           </div>
           <p className="max-w-2xl text-xs text-muted-foreground">{t.brain.subtitle}</p>
           {subject.memoryUpdatedAt && (
-            <p className="tabular-nums text-[11px] text-muted-foreground">
+            <p className="tabular-nums text-[14px] text-muted-foreground">
               {format(t.brain.meta, { v: subject.memoryVersion, n: subject.memorySourceCardCount, date: dateFmt.format(subject.memoryUpdatedAt) })}
             </p>
           )}
@@ -96,7 +96,7 @@ export function MemoryPanel({ subject }: { subject: Subject }) {
 
       <p className="text-xs text-muted-foreground">{!ai.key ? t.ai.noKey : subjectCards.length === 0 ? t.brain.noCards : t.brain.resyncHint}</p>
       {notice && (
-        <p role={notice.tone === "error" ? "alert" : "status"} className={cn("text-sm", notice.tone === "error" ? "text-destructive" : "text-primary")}>
+        <p role={notice.tone === "error" ? "alert" : "status"} className={cn("text-sm", notice.tone === "error" ? "text-destructive" : "text-brand")}>
           {notice.text}
         </p>
       )}

@@ -103,7 +103,7 @@ export function Dashboard() {
           <ul className="flex h-28 items-end gap-1.5">
             {activity.map((day, i) => (
               <li key={day.day.toISOString()} className="flex h-full flex-1 flex-col items-center justify-end gap-1" title={`${dayFmt.format(day.day)}: ${day.reviews}`}>
-                <span className="text-[10px] text-subtle tabular-nums">{day.reviews || ""}</span>
+                <span className="text-[12px] text-subtle tabular-nums">{day.reviews || ""}</span>
                 <span className={cn("w-full rounded-t-[3px]", i === activity.length - 1 ? "bg-brand" : day.reviews === 0 ? "bg-border" : "bg-border-strong")} style={{ height: `${Math.max(3, (day.reviews / peak) * 100)}%` }} />
               </li>
             ))}

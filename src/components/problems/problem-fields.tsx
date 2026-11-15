@@ -109,7 +109,7 @@ export function AutosaveField({ label, value, placeholder, onSave, onChange, hin
         onBlur={flush}
         className={cn(
           "field-sizing-content block max-h-64 min-h-[3.25rem] w-full resize-none rounded-md bg-muted px-2.5 py-2 text-sm leading-relaxed text-foreground transition-colors placeholder:text-subtle hover:bg-secondary focus-visible:bg-secondary",
-          mono && "font-mono text-[13px]",
+          mono && "font-mono text-[14px]",
         )}
       />
       {hint && <p className="text-caption text-subtle">{hint}</p>}

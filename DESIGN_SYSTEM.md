@@ -1,151 +1,146 @@
 # VaultLearn — Design & Copywriting System
 
-The single source of truth for how VaultLearn looks, moves and speaks. Tokens live in
-[`src/app/globals.css`](src/app/globals.css), motion presets in [`src/lib/motion.ts`](src/lib/motion.ts), copy in
-[`src/lib/i18n/dictionaries`](src/lib/i18n/dictionaries). The contrast table in §2 is enforced by
-[`tests/design-tokens.test.ts`](tests/design-tokens.test.ts), and the copy rules in §8 by
-[`tests/i18n.test.ts`](tests/i18n.test.ts) — if you change a token or a string, those tests tell you whether you broke the system.
+The source of truth for how VaultLearn looks, moves and speaks. Tokens live in `src/app/globals.css`;
+`tests/design-tokens.test.ts` parses that file and fails when a token pair of **any style, in either mode, or any accent colour** stops meeting
+WCAG 2.2 AA. Read this before UI work.
+
+The look is a three-part, per-device **appearance** you can change in Settings (§2.5): a *style* (Minimal, Doodle, Cafe, Brutalism, Stitch,
+Retro, Tetris), an *accent colour*, and a *layout* (sidebar or top bar), on top of the account's light / dark *mode*.
 
 ---
 
-## 1. Where this comes from
+## 1. Context and goals
 
-The system is a synthesis, not a copy. Each reference contributed one idea that is actually used here.
+**Who**: students (Vietnamese high-school and university STEM) turning wrong exam answers into a spaced-repetition vault.
+**Feeling**: a well-used sketchbook. Friendly, a little playful, never childish: mistakes are material to work with, not failures.
+**Sources**: the TypeUI skills. Doodle (sky `#49B6E5`, navy `#263D5B`) and Tetris (surface `#DFE7FF`, text `#1C398E`, ink `#1C202B`, compact density) keep
+their own tokens (pinned by the token test); Minimal, Cafe, Brutalism, Stitch and Retro are our own palettes in the spirit of those names.
+Common to all: a 14 / 16 / 18 / 24 / 32 / 40 type scale, a 4 / 8 / 12 / 16 / 24 / 32 spacing scale, and "accessibility over novelty".
 
-| Reference | What we took | Where it shows up |
-|---|---|---|
-| **Linear** — [How we redesigned the Linear UI](https://linear.app/now/how-we-redesigned-the-linear-ui) | Build themes in a perceptually uniform space (LCH) from a few inputs — base, accent, contrast — so elevation steps look even in light and dark. | Every color is authored as `oklch()`; surfaces are a lightness ladder at one hue (§2). |
-| **Stripe** — [Designing accessible color systems](https://stripe.com/blog/accessible-color-systems) | Tune lightness perceptually so every text/surface pair clears WCAG thresholds by construction, not by luck. | The verified contrast table (§2.3) and its unit test. |
-| **Apple** — [Animate with springs, WWDC23](https://developer.apple.com/videos/play/wwdc2023/10158/) | Describe springs with two numbers, *duration* and *bounce*. Default to bounce 0; stay under ~0.3 for UI. Springs keep velocity when interrupted. | The three spring presets (§5). |
-| **Readwise Reader** — [Appearance](https://docs.readwise.io/reader/docs/faqs/appearance) | Reading surfaces get reading themes: warm backgrounds, calm text color, highlight color as a first-class token. | The Paper theme, the serif reading face, the highlighter token `--mark` used for snips. |
-| **Anthropic Claude** | Warm, slightly yellow neutrals instead of blue-gray; a serif for content next to a quiet sans for chrome; ink-colored primary actions. | Neutral hue 75–88°, Source Serif 4 for questions and titles, `--primary` is ink, not a brand gradient. |
-| **Microsoft** — [Vietnamese localization style guide](https://download.microsoft.com/download/b/f/e/bfecb1b4-21ab-48fd-a48c-c2471b026f8f/vie-vnm-StyleGuide.pdf) | A product voice is localized, not translated: conversational, direct, native word order, one language per label. | The Vietnamese copy rules (§8). |
+**Goals, in priority order**
+1. Readable and operable by everyone: WCAG 2.2 AA, keyboard first, visible focus. The doodle look never wins a conflict with this.
+2. Obvious hierarchy: one primary action per view; ink outlines show what is a surface and what is interactive.
+3. Character from shape, outline, shadow and paper, never from clutter: no stickers, no emoji, and **one clean sans-serif for text in every style and language**.
 
-Honest limits: the eye-comfort literature is mixed — there is no strong evidence that dark mode by itself reduces strain. What is
-well supported is avoiding the extremes: pure white backgrounds (glare), pure black with pure white text (halation, worse with
-astigmatism), and low-contrast body text. Both themes are built around that, and the choice between them is left to the student.
+`User.theme` (the account's mode) is still the Prisma enum; the legacy `OBSIDIAN` value renders as Dark (`THEME_ATTRIBUTE`). It is stored on the server,
+while style, accent and layout are device preferences in localStorage.
 
 ---
 
 ## 2. Color
 
 ### 2.1 Method
+Colors are hex (the skill's own values) or `oklch()`, declared once per style and mode in `globals.css`, one declaration per line. Components never
+hard-code a color: use the Tailwind tokens (`bg-background`, `bg-card`, `bg-sunken`, `bg-primary`, `bg-accent`, `text-brand`, `text-muted-foreground`,
+`border-border`, …). The only literal colors allowed are physical objects that do not theme: exam pages, scratchpad paper and ink.
 
-1. **One neutral hue per theme.** Paper neutrals sit at OKLCH hue 75–88° (a soft yellow warmth); Dark neutrals at 80–85° with
-   almost no chroma, so dark surfaces read as graphite rather than blue-black.
-2. **Surfaces are a lightness ladder**, not a pile of opacities: `sunken → background → card → popover`. Each step is ~0.02–0.03
-   OKLCH lightness, enough to separate layers without borders doing all the work.
-3. **Three text levels**, each verified against every surface it can sit on: `foreground` (≥ 7:1, AAA), `muted-foreground` and
-   `subtle-foreground` (≥ 4.5:1, AA).
-4. **Ink is the primary action.** Primary buttons are solid `foreground` on `background`. The one chromatic accent — **ink blue**,
-   `--brand` — is reserved for *state*: focus, selection, links, progress, the active snip.
-5. **The highlighter is the signature.** `--mark` is the yellow of a highlighter pen. It marks snipped regions on an exam page
-   (blended with `multiply`, like real marker on paper) and the "priority" flag. It is never decoration.
-6. **No pure white, no pure black.** The lightest surface is `#FEFCF7`; the darkest is `#110F0D`.
+### 2.2 Tokens (shown for Doodle; every style defines the same set)
 
-### 2.2 Tokens
-
-| Token | Paper (OKLCH `L C H`) | Paper hex | Dark (OKLCH `L C H`) | Dark hex |
-|---|---|---|---|---|
-| `--background` | `0.966 0.014 88` | `#F8F3E9` | `0.195 0.005 80` | `#161512` |
-| `--sunken` | `0.945 0.016 88` | `#F1ECE1` | `0.17 0.005 80` | `#110F0D` |
-| `--card` | `0.984 0.01 88` | `#FDFAF2` | `0.228 0.006 80` | `#1E1C19` |
-| `--popover` | `0.992 0.007 88` | `#FEFCF7` | `0.262 0.006 80` | `#262421` |
-| `--border` | `0.905 0.016 86` | `#E4DFD4` | `0.275 0.006 80` | `#292724` |
-| `--border-strong` | `0.86 0.018 85` | `#D6D0C4` | `0.325 0.007 80` | `#363430` |
-| `--input` | `0.625 0.02 82` | `#8E877A` | `0.53 0.008 80` | `#6E6B67` |
-| `--foreground` | `0.255 0.012 75` | `#26221C` | `0.93 0.01 85` | `#EBE7E0` |
-| `--muted-foreground` | `0.45 0.014 78` | `#5A544D` | `0.74 0.01 85` | `#AEAAA4` |
-| `--subtle-foreground` | `0.525 0.014 80` | `#6F6A61` | `0.65 0.01 85` | `#928F88` |
-| `--brand` | `0.45 0.145 264` | `#2A4FA4` | `0.78 0.105 264` | `#95B7FB` |
-| `--brand-hover` | `0.4 0.145 264` | `#1D4094` | `0.83 0.08 264` | `#ADC7FC` |
-| `--accent` | `0.93 0.032 264` | `#DDE8FE` | `0.3 0.05 264` | `#212D47` |
-| `--accent-foreground` | `0.38 0.13 264` | `#1D3C86` | `0.84 0.075 264` | `#B2CBFC` |
-| `--mark` | `0.885 0.13 96` | `#F3D96E` | `0.84 0.13 92` | `#E9C85E` |
-| `--mark-soft` | `0.945 0.07 96` | `#FAEDB8` | `0.31 0.045 92` | `#383014` |
-| `--mark-foreground` | `0.4 0.075 80` | `#5D420E` | `0.86 0.11 92` | `#EBCF7A` |
-| `--success` | `0.5 0.105 152` | `#2B7444` | `0.78 0.12 155` | `#73CE95` |
-| `--success-soft` | `0.945 0.035 152` | `#DCF4E2` | `0.28 0.04 155` | `#182F20` |
-| `--warning` | `0.53 0.115 68` | `#975D04` | `0.8 0.115 80` | `#E5B562` |
-| `--warning-soft` | `0.945 0.045 88` | `#F9ECCB` | `0.29 0.04 80` | `#362913` |
-| `--destructive` | `0.52 0.165 28` | `#B5352D` | `0.74 0.13 25` | `#F28881` |
-| `--destructive-soft` | `0.945 0.025 28` | `#FDE7E4` | `0.28 0.05 25` | `#3E1E1C` |
-
-Derived aliases: `--primary` = `--foreground`, `--primary-foreground` = `--background`, `--ring` = `--brand`,
-`--muted` / `--secondary` = a 5–6% ink wash over the current surface (hover and quiet fills).
-
-### 2.3 Verified contrast (WCAG 2.x)
-
-Computed from the tokens above; the same pairs run in `tests/design-tokens.test.ts`.
-
-| Pair (text on surface) | Target | Paper | Dark |
+| Token | Light | Dark | Role |
 |---|---|---|---|
-| `foreground` on `background` / `card` / `sunken` / `popover` | ≥ 7:1 | 14.30 / 15.16 / 13.42 / 15.42 | 14.82 / 13.79 / 15.52 / 12.56 |
-| `muted-foreground` on `background` / `card` / `sunken` / `popover` | ≥ 4.5:1 | 6.76 / 7.16 / 6.34 / 7.29 | 7.90 / 7.35 / 8.27 / 6.70 |
-| `subtle-foreground` on `background` / `card` / `sunken` / `popover` | ≥ 4.5:1 | 4.86 / 5.15 / 4.56 / 5.24 | 5.66 / 5.27 / 5.93 / 4.80 |
-| `primary-foreground` on `primary` (buttons) | ≥ 7:1 | 14.30 | 14.82 |
-| `brand` on `background` / `card` / `sunken` | ≥ 4.5:1 | 6.90 / 7.31 / 6.48 | 9.08 / 8.45 / 9.51 |
-| `accent-foreground` on `accent` (selected rows, chips) | ≥ 4.5:1 | 8.35 | 8.39 |
-| `mark-foreground` on `mark-soft` (priority chip) | ≥ 4.5:1 | 7.94 | 8.58 |
-| `success` on `background` / `success-soft` | ≥ 4.5:1 | 5.15 / 4.91 | 9.56 / 7.50 |
-| `warning` on `background` / `warning-soft` | ≥ 4.5:1 | 4.89 / 4.61 | 9.67 / 7.49 |
-| `destructive` on `background` / `destructive-soft` | ≥ 4.5:1 | 5.41 / 5.05 | 7.49 / 6.12 |
-| `input` (control border) on `background` / `card` | ≥ 3:1 | 3.22 / 3.41 | 3.44 / 3.21 |
+| `background` | `#FBF8F0` | `#131D2E` | Page paper (with dot grid) |
+| `sunken` | `#F1EBDD` | `#0E1622` | Sidebar, wells |
+| `card` / `popover` | `#FFFFFF` | `#1B2840` / `#223152` | Surfaces |
+| `foreground` | `#111827` | `#F4F1E8` | Text and **ink** |
+| `muted-foreground` / `subtle-foreground` | `#4B5563` / `#5B6472` | `#C3CBD8` / `#A3adbd` | Secondary text |
+| `border`, `input` | `#111827` | `#E8EEF6` | The ink outline of every surface and control |
+| `primary` | accent (default blue `#4C9AFF`; Doodle's skill sky is `#49B6E5`) | same | **Fill** of the one primary action; always outlined, never text |
+| `primary-foreground` | `#111827` | `#111827` | Text on `primary` |
+| `brand` | accent, darkened (default `#0052B1`) | accent, lightened (default `#6FBEFF`) | State and text accent: focus ring, links, progress |
+| `accent` / `accent-foreground` | tint of the accent (default `#D8E9FF` / `#111827`) | (default `#2A4774` / `#F4F1E8`) | Selected and active fills |
+| `mark`, `mark-soft`, `mark-foreground` | `#FFD84D`, `#FFF0B3`, `#5C4300` | `#F6CE45`, `#3B3210`, `#F5DE86` | Highlighter: snipped regions and the priority flag only |
+| `success` / `warning` / `destructive` (+ `-soft`) | `#15803D` / `#B45309` / `#C81E1E` | `#4ADE80` / `#FBBF24` / `#F87171` | Status text and tints |
 
-`--border` and `--border-strong` are hairlines that *separate* regions (≈ 1.2–1.5:1 by design). Anything a user must *find* to
-operate — an input's edge, a focus ring — uses `--input` or `--ring`, which clear 3:1.
+`primary`, `primary-foreground`, `brand`, `brand-hover`, `accent` and `accent-foreground` are the **accent group**: they are not part of a style. They come from the
+accent colour (§2.5) and are identical in every style.
+
+**Deviations from the skill (accessibility wins):** its success `#16A34A` and warning `#D97706` fail 4.5:1 as text on white, and its danger
+`#DC2626` fails on a tinted background, so text uses the darker `#15803D`, `#B45309`, `#C81E1E`. The sky `#49B6E5` fails as text on white (about 2.4:1),
+so it is only ever a fill carrying dark ink text and an ink outline.
+
+### 2.3 Verified contrast
+Enforced by `tests/design-tokens.test.ts` for all 7 styles × 2 modes, and for a sweep of accent colours (the five presets plus black, white, pure red/green/blue/yellow/…, grey) on every one of them (WCAG 2.x ratios): `foreground` ≥ 7:1 on every surface; `muted-foreground`, `subtle-foreground`, `brand` ≥ 4.5:1 on
+every surface; `primary-foreground` on `primary` ≥ 4.5:1; `accent-foreground` on `accent` ≥ 4.5:1; status colors ≥ 4.5:1 on background, card and their soft tint;
+`border` and `input` ≥ 3:1 against background and card (non-text contrast). The test also pins the skill's brand tokens so they are not changed by accident.
+Hard offset shadows and paper patterns are decoration and carry no meaning, so they are exempt.
+Each style keeps its four surfaces at least as light (Light) / dark (Dark) as `SURFACE_LIMIT` in `src/lib/appearance.ts`; that bound is what lets the accent be derived once and
+still pass on every style, and the test enforces it.
 
 ### 2.4 Usage rules
+- `primary` (the accent fill) is for **one** primary action per view, with the style's outline and shadow. Everything else is `outline`, `secondary` or `ghost`.
+  Because the accent can be any colour, `primary` is **never used as text**: use `text-brand`.
+- `brand` is state, not decoration: focus, links, progress, selection text.
+- `mark` (yellow) is only for snipped regions and the priority flag.
+- Exam pages, crops and the Scratchpad paper keep fixed light colors in both modes and all styles: they are physical paper.
+- Never convey meaning by color alone: statuses pair a dot with a text label.
 
-- Text is `foreground`, `muted-foreground` or `subtle-foreground`. Never lower the opacity of text to make it quieter.
-- `brand` never fills large areas. Selected states use `accent` + `accent-foreground`.
-- Status is a 6px dot plus a word. Color alone never carries meaning.
-- Review ratings map to semantics: Again → `destructive`, Hard → `warning`, Good → `success`, Easy → `brand`.
-- Exam pages are photographs of paper: they keep their own white in both themes, sit on `sunken`, and get a hairline.
-- Subject and tag swatches come from one perceptually even ramp (OKLCH L 0.60, C ≈ 0.115) so no subject shouts:
-  `#5D7EC5` `#906DB7` `#258ABB` `#3D9461` `#A5761D` `#BB6456` `#B56184` `#209292`. They appear only as dots and thin rules.
-- No hex values in components. Use the Tailwind tokens (`bg-card`, `text-muted-foreground`, `border-border`, `text-brand`, `bg-mark` …).
+### 2.5 Appearance system (Settings → Hiển thị / Appearance)
+
+Four independent settings, each owning its own attribute or variables, so none can bleed into another:
+
+| Setting | Stored in | Applied as | Owns |
+|---|---|---|---|
+| Mode (light / dark) | account (`User.theme`) | `data-mode` on `<html>` | which palette of the style is used |
+| Theme (style) | `vl:theme-style` | `data-theme` | palette per mode + shape / outline / shadow / paper variables |
+| Accent colour | `vl:accent`, `vl:accent-vars` | `<style id="vl-accent">` | the accent group only |
+| Layout | `vl:layout` | `data-layout` | which navigation is visible |
+
+- **Namespacing**: a style's CSS lives only in `[data-theme="x"]` and `[data-theme="x"][data-mode="y"]` blocks and may set only `--variables` there (the test fails otherwise). The
+  only element rules outside those blocks are Doodle's wobbly `.rounded-*` and the square styles' badges, both under their own `[data-theme]`.
+- **Accent**: default blue, five presets (blue, green, red, purple, orange) and a native colour input. `deriveAccentVars()` computes both modes: `primary` is the colour itself;
+  `primary-foreground` is ink, white or black, whichever reads at 4.5:1; `brand` slides the colour's lightness until it clears 4.5:1 on the darkest / lightest surface any style
+  allows and on the tint; `accent` is a tint kept at 7:1 against the weakest body text of any style. The injected rule is `html[data-theme][data-mode="…"]`, which outranks style
+  palettes and the default blue without `!important`, and touches nothing but those six variables. The default blue is hard-coded in `globals.css` (a test keeps it in sync).
+- **No flash**: an inline boot script (`bootScript()` in `appearance.ts`) sets mode, language, style, layout and the accent stylesheet before first paint from localStorage,
+  validating every value against a fixed set or a strict `#rrggbb` pattern. `useApplyAppearance()` (mounted in `AppShell`) keeps `<html>` in sync afterwards, including across tabs.
+- **Previews**: a theme tile in Settings re-declares `data-theme` and `data-mode` on itself, so it renders in that style for real; the accent is inherited from the page.
+- Adding a style: add its id to `THEME_STYLES`, a structure block + light and dark palette blocks to `globals.css` (same token set), and its name and description to both
+  dictionaries. The token test then checks it automatically.
 
 ---
 
 ## 3. Typography
 
-| Role | Family | Use |
+| Face | Use |
+|---|---|
+| **Inter** (`--font-inter`, then the system sans stack) | Everything: interface, titles, question and solution text, in English **and** Vietnamese. Inter ships the Vietnamese subset, so diacritics never fall back to another face |
+| **JetBrains Mono** | LaTeX/Markdown source, keyboard hints, numbers that must align |
+
+There is deliberately **one text face**. A previous version used a handwriting font for Latin and a different fallback for Vietnamese; it was hard to read and
+made the two languages look unrelated, so no style may set its own font. `--font-serif` and `--font-heading` alias `--font-sans`; style character comes from
+weight, size, outline and paper only. Never add a display, cursive or handwriting face, and never switch font by language.
+
+Scale (the skill's 14 / 16 / 18 / 24 / 32 / 40), as role utilities in `globals.css`:
+
+| Role | Size / line | Use |
 |---|---|---|
-| **Interface** | Inter (`--font-sans`) | Navigation, buttons, labels, tables, numbers (`tabular-nums`). |
-| **Reading** | Source Serif 4 (`--font-serif`) | Page titles, question text, solutions, notes rendered as content. Pairs with KaTeX's serif math so prose and formulas read as one voice. |
-| **Source** | JetBrains Mono (`--font-mono`) | Markdown/LaTeX being edited, keyboard hints. |
+| `text-display` | 32 / 40 (Doodle adds a wavy underline via `--display-line`) | One page title per view |
+| `text-title` | 24 / 32 | Dialog titles, section titles |
+| `text-heading` | 18 / 26 | Card and panel headings |
+| `text-reading` | 18 / 30 | Question and solution content |
+| body (`text-sm`) | 15 / 24 | Default interface text |
+| `text-caption` | 14 / 20 | Metadata, hints |
+| `text-overline` | 14 / 20, uppercase, tracked | Section labels |
 
-All three ship the Vietnamese subset.
-
-| Token | Size / line-height | Weight | Use |
-|---|---|---|---|
-| `display` | 30 / 38, serif, −0.01em | 500 | Page title (`h1`), one per page |
-| `title` | 20 / 28, serif | 500 | Section and dialog titles |
-| `heading` | 15 / 22 | 600 | Card titles, group headers |
-| `body` | 14 / 22 | 400 | Interface text |
-| `reading` | 16 / 27, serif | 400 | Questions, solutions, notes |
-| `caption` | 12.5 / 18 | 400–500 | Metadata, hints |
-| `overline` | 11 / 16, +0.06em, uppercase | 600 | Section labels in the sidebar and group dividers |
-
-Rules: reading measure 60–75 characters; line-height never below 1.25 for any text that can contain Vietnamese (stacked
-diacritics — Ế, ỗ, ặ — clip otherwise) and never below 1.5 for running text; weight contrast over size contrast; sentence
-case everywhere (Vietnamese has no title case — do not capitalize Every Word).
+Line height is ≥ 1.25 everywhere (Vietnamese stacks diacritics). Sentence case. Minimum text size is 14px; the only exceptions are numeric micro-labels (snip numbers, key hints, chart values) at 12px.
 
 ---
 
 ## 4. Space, shape, depth, icons
 
-- **Spacing**: 4px grid. Component padding 12/16/20/24; page gutter 24 (16 on phones); section gap 32–40.
-- **Radius**: controls 8px, cards 12px, sheets and dialogs 16px, chips and dots fully round. Nested radii shrink by the padding.
-- **Depth** has three levels and each level uses one cue first: *sunken* (sidebar, document well) is darker; *resting*
-  (cards) is a hairline plus `--shadow-xs`; *floating* (menus, dialogs, the snip in flight) is `--shadow-lg`. In Dark,
-  elevation is expressed by lighter surfaces; shadows only anchor floating layers.
-- **Icons**: Lucide at a 1.5 stroke (set globally in CSS), 16px in controls and 18px in navigation, always inheriting text
-  color. An icon appears only where it does a job: identifying a destination in the collapsed sidebar, a tool in a
-  toolbar, or an icon-only button (which always has an accessible name). Headings, badges and body text carry no icons.
-- **No emoji, anywhere** — not in labels, headings, badges, placeholders, toasts or empty states. Emphasis comes from
-  type, spacing and the status dot.
+- **Spacing**: 4 / 8 / 12 / 16 / 24 / 32 (Tailwind `1 / 2 / 3 / 4 / 6 / 8`). Page column is centered; sections are separated by an overline label and a dashed rule.
+- **Shape variables per style** (set only inside that style's `[data-theme]` block, defaults are Minimal's): `--r-xs … --r-2xl` radii, `--bw` outline width
+  (1px Minimal/Cafe, 2px Doodle/Stitch/Retro/Tetris, 3px Brutalism), `--card-border-style` (solid; dashed for Stitch's seams), `--elevation-xs … lg` shadows,
+  `--lift` / `--press` (how far a raised control rises on hover and sinks on press: 0 in the soft styles), `--icon-stroke`, `--paper-image` / `--paper-size`
+  (none, dots, hatching, scanlines, grid), `--display-line` and `--dialog-tilt` (Doodle only).
+- **Components never hard-code a style.** `rounded-*` reads `--radius-*` (which read `--r-*`), `shadow-*` reads `--elevation-*`, and unlayered rules make every
+  `border-2` / card follow `--bw`. `--radius-*` stay single lengths because shadcn/Base UI size classes do arithmetic on them.
+- **Outline colour**: `border` is the quiet divider colour; `input` is the control outline and must reach 3:1 (non-text contrast), so buttons and fields use `border-input`.
+- **Style signatures**: Minimal soft shadows and hairlines; Doodle ink outlines, wobbly corners (`[data-theme="doodle"] .rounded-*`), hard shadows, dot grid, wavy
+  title underline; Cafe warm paper and round corners; Brutalism square, 3px black, hard 3–8px shadows; Stitch dashed seams and fabric hatching; Retro beveled
+  2px with scanlines (green phosphor in dark); Tetris compact square blocks on a grid.
+- **Icons**: Lucide; stroke weight is the style's `--icon-stroke` (global CSS). Only where functional: sidebar destinations, toolbar tools, icon-only buttons (always with an accessible name).
+  No icons in headings, badges, labelled buttons or empty states. **No emoji anywhere.**
 
 ---
 
@@ -160,45 +155,52 @@ Motion explains where things come from and where they go. Everything is a spring
 | `spring.lively` | 0.5s · 0.16 | One hero moment per flow: a snip landing in the tray, a card being graded |
 | `fade` | 0.16s ease-out | Opacity-only changes, backdrops |
 
-Choreography:
+Micro-interactions (CSS, 150ms) follow the style: in the hard-shadow styles a raised control **lifts** by `--lift` up-left on hover (shadow grows `xs` → `sm`) and **pushes in** by `--press` on press
+(shadow drops to none), like pressing a stamp; the soft styles set both to 0 and only change the shadow. Doodle dialogs enter with a slight −0.4° tilt that settles (`--dialog-tilt`).
 
-- **Shared elements**: the sidebar's active pill and every segmented control use `layoutId`, so selection *moves* instead of blinking.
-- **Snip → tray**: on release, the selected region lifts off the page (`--shadow-lg`), flies to its slot in the tray with
-  `spring.lively`, and the tray reflows with `layout`. The page keeps a highlighter mark where it was cut.
+- **Shared elements**: the sidebar's active pill and every segmented control use `layoutId`, so selection *moves* instead of blinking. Their thumbs are inked (`border-2 border-border`).
+- **Snip → tray**: on release the region flies to its tray slot with `spring.lively`; the page keeps a highlighter mark where it was cut.
 - **Reveal**: the answer side of a review card slides 12px and fades in; grading swaps cards with a short cross-slide.
-- **Sheets** (problem detail, mobile navigation) enter from their edge with `spring.smooth` over a fading scrim.
-- **Cursor and scroll**: the snip tool shows hairline crosshair guides that follow the pointer; cards answer hover with a 1px
-  lift; page headers gain a hairline only once content scrolls beneath them.
 - Entrances are ≤ 12px of travel and never block input. Nothing loops. Nothing animates on a timer.
-- `prefers-reduced-motion`: a global `MotionConfig reducedMotion="user"` drops transforms and keeps short fades; CSS transitions collapse to instant.
+- `prefers-reduced-motion`: `MotionConfig reducedMotion="user"` drops transforms; the global CSS rule collapses transitions to instant.
 
 ---
 
 ## 6. Layout
 
-- **Shell**: a collapsible left sidebar (248px ↔ 60px icon rail) and a content column. The sidebar is in normal flow — nothing
-  floats over content. Under 1024px it becomes a sheet opened from a slim top bar.
-- **Sidebar order**: Overview, Review (with today's count), Problem Vault, Sources, Practice · Subjects (the global filter) ·
-  Settings and the account menu (accounts, theme, language).
-- **Pages**: max width 1120px for libraries and dashboards, 720px for reading and forms. One serif title, one sentence of
-  description, primary action top-right.
-- **Source workspace**: full height, two panes. Left: the document on a sunken well, continuous scroll, snip tool on by
-  default. Right: the snippets tray (400px). Each snippet is one card — image, tags, solution, takeaway — and saves itself.
-- **Problem Vault**: one responsive grid of cards with sticky controls for search, grouping, sorting and filters; groups are
-  separated by an overline label and a hairline.
+- `AppShell`, **sidebar layout** (default): collapsible left sidebar (248px ↔ 60px rail) plus content.
+- **Top bar layout** (Settings → Layout, 1024px and up): a sticky 56px horizontal bar with the logo, the five destinations (icons only below 1280px), a subject menu (the global
+  subject filter), Settings, language, light / dark, and the account menu. The sidebar is hidden.
+- Both navigations are always rendered and CSS shows one (`.vl-rail` / `.vl-topnav` under `[data-layout]`), so there is no flash on load. Under 1024px the slim top bar and
+  sheet are used whichever layout is chosen. `--chrome` is the height of the bar above the page (3rem mobile, 0 sidebar, 3.5rem top bar): full-height workspaces and sticky
+  headers subtract it instead of hard-coding a number.
+  Nothing floats over content except the Scratchpad.
+- Routes: `(auth)` pages have no shell; `(app)/(pages)` are a padded centered column; `sources/[id]` is the full-viewport workspace.
+- Page pattern: one `text-display` title, one sentence of description, the primary action top-right; sections separated by a `text-overline` label and a dashed rule.
+- Responsive: layouts work from 320px; touch targets are at least 36px (controls are 36–40px high).
 
 ---
 
 ## 7. Component rules
 
-- **Buttons**: one primary (ink) per view. Secondary actions are outline or ghost. Destructive actions are ghost-red until confirmed.
-  Labels are verbs. Height 32px (28px in toolbars, 40px for the main call to action).
-- **Fields**: label above, hint below, error replaces hint. Inline editors in cards are quiet (filled, borderless) and save
-  on pause; forms in dialogs use bordered inputs and an explicit Save.
-- **Cards**: a hairline, 12px radius, `--shadow-xs`. A card that opens something lifts 1px on hover.
-- **Badges**: neutral by default; tinted only for state (AI-generated, priority, overdue).
-- **Empty states**: one sentence on what belongs here, one action. No illustration.
-- **AI output** is always labeled with the amber *AI-generated* note (`ExperimentalBadge`) and never auto-saved over the student's own text.
+All states are required: default, hover, focus-visible, active, disabled, and (for inputs) invalid.
+
+| Component | Rules |
+|---|---|
+| **Button `default`** | `bg-primary`, ink text, `border-2` ink, `shadow-xs`. Hover: lift + `shadow-sm`. Active: push in, no shadow. Disabled: 50% opacity, no motion. One per view |
+| **Button `outline` / `secondary`** | Same construction on `card` / `accent` fill |
+| **Button `ghost`** | No outline until hover/expanded; for toolbars and icon buttons |
+| **Button `destructive`** | `destructive-soft` fill, `destructive` text and border; used only inside a confirm step |
+| **Button `link`** | `brand` text, wavy underline |
+| **Input / Textarea / Select** | `card` fill, `border-2` ink, 40px high. Focus: `ring-3` in `brand` plus `shadow-xs`. Invalid: `border-destructive` and a text error below, never color alone |
+| **Badge** | Pill (`rounded-full`), `border-2`, 24px. Text only, no icon |
+| **Surface / Card** | `card` fill, 2px ink, `rounded-lg`, `shadow-xs`. Interactive cards lift on hover |
+| **Segmented control** | Muted track; the selected thumb is inked and animates with `layoutId` |
+| **Sidebar item** | Active pill is `accent` with a 2px ink border and `shadow-xs`; `aria-current="page"` |
+| **Modal / Dropdown / Scratchpad** | `popover` fill, 2px ink, `shadow-lg`. Modal is a native `<dialog>`; Scratchpad is z-70 above the lightbox (z-60) |
+| **Tooltip / help popover** | Same as Dropdown, text ≤ 2 lines |
+| **Status** | A colored dot plus a text label |
+| **Experimental badge** | Mandatory on AI-generated problems (see `CLAUDE.md` §4.6) |
 
 ---
 
@@ -271,3 +273,47 @@ theatrical. We do not cheer, tease, or sell.
 | AI unavailable | Cần khoá API để dùng tính năng này. | This needs an API key. |
 | AI disclaimer | Do AI tạo · Có thể có sai sót | AI-generated · May contain errors |
 | Recoverable error | Không lưu được. Hãy thử lại. | Couldn't save. Try again. |
+
+---
+
+## 9. Accessibility criteria
+
+1. WCAG 2.2 AA contrast for text and for the ink outline of controls (3:1), enforced by `tests/design-tokens.test.ts`.
+2. **Focus is always visible**: a 3px `brand` ring with a 2px offset on every focusable element (global `:focus-visible`). Never remove an outline without replacing it.
+3. Keyboard first: every action works without a pointer; dialogs trap focus and return it; Esc closes the topmost layer; tab order follows reading order.
+4. Icon-only controls have an accessible name and a `title`.
+5. Decorative effects (offset shadows, dot grid, wobble, wavy underline) must never be the only carrier of state or meaning.
+6. Reduced motion is honored (`MotionConfig` and the global media query).
+7. Text can be resized to 200% without loss; layouts reflow at 320px.
+8. Language is declared (`<html lang>` follows the UI language) so the correct handwriting face and screen-reader voice are used.
+
+---
+
+## 10. Anti-patterns
+
+- Hex values or arbitrary colors in components (use tokens); fake bold on a single-weight face; `font-bold` for hierarchy.
+- Sky `#49B6E5` as text or as a thin icon on white; success/warning in their bright skill values as text.
+- More than one `primary` button in a view; primary used for destructive or secondary actions.
+- Setting a font in a style, switching fonts by language, or adding a handwriting / display face.
+- A style rule that sets anything but `--variables` inside its own `[data-theme]` block, or one that is not scoped to a `[data-theme]` at all.
+- Using `text-primary` / `bg-primary/..` for text or thin lines: the accent can be any colour (use `text-brand`).
+- Hard-coding a radius, border width or shadow that should follow the style (use `rounded-*`, `border-2`, `shadow-*`).
+- Arbitrary `rounded-[…]` on cards (it bypasses the style's radius).
+- Rotating or skewing text and controls for "character" (it hurts legibility and hit targets). Only dialogs tilt, and only while entering.
+- Emoji, decorative icons, stickers; mixing Vietnamese and English in one string; hard-coded user-facing strings.
+- Animating on a timer or looping; motion that blocks input.
+
+---
+
+## 11. QA checklist
+
+- [ ] `npm run check` is green (token contrast table, i18n, typecheck, lint).
+- [ ] Each of the 7 themes in both modes: text legible, outlines visible, shadows not noisy; the Settings preview tile matches the real page.
+- [ ] Accent: a preset and a custom colour (try a very light and a very dark one) update buttons, selected items, links and the focus ring in every theme; reload keeps all of it.
+- [ ] Layout: sidebar and top bar both reach every page and the subject filter; below 1024px the mobile bar and sheet still work; no horizontal scroll.
+- [ ] Tab through the page: focus ring visible everywhere, no traps, Esc closes dialogs.
+- [ ] Vietnamese and English render in the same font; no clipped diacritics, nothing truncates a label.
+- [ ] One primary button per view; destructive actions go through a confirmation.
+- [ ] Reduced-motion on: nothing slides or tilts.
+- [ ] 320px width: no horizontal scroll, targets ≥ 36px.
+- [ ] No emoji, no hard-coded colors or strings introduced.

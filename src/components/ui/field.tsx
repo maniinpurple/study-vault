@@ -3,10 +3,10 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const control =
-  "w-full rounded-lg border border-input bg-background/60 px-3 text-sm text-foreground placeholder:text-muted-foreground/70 outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-50 aria-invalid:border-destructive";
+  "w-full rounded-lg border-2 border-input bg-card px-3 text-sm text-foreground placeholder:text-subtle outline-none transition-shadow focus-visible:shadow-xs focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-50 aria-invalid:border-destructive";
 
 export function Input({ className, ...props }: React.ComponentProps<"input">) {
-  return <input className={cn(control, "h-9", className)} {...props} />;
+  return <input className={cn(control, "h-10", className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
@@ -15,7 +15,7 @@ export function Textarea({ className, ...props }: React.ComponentProps<"textarea
 
 export function Select({ className, children, ...props }: React.ComponentProps<"select">) {
   return (
-    <select className={cn(control, "h-9 pr-2", className)} {...props}>
+    <select className={cn(control, "h-10 pr-2", className)} {...props}>
       {children}
     </select>
   );
@@ -38,7 +38,7 @@ export function Field({
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <label htmlFor={htmlFor} className="text-xs font-medium text-foreground">
+      <label htmlFor={htmlFor} className="text-sm text-foreground">
         {label}
       </label>
       {children}

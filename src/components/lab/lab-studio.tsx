@@ -362,12 +362,12 @@ function LabWorkspace({ subject, subjects, onSubject }: { subject: Subject; subj
                           {on && <span className={cn("bg-primary-foreground", mode === "CLONE" ? "size-1.5 rounded-full" : "size-2 rounded-[2px]")} />}
                         </span>
                         <span className="min-w-0 flex-1 space-y-1">
-                          <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span className="flex flex-wrap items-center gap-1.5 text-[14px] text-muted-foreground">
                             {card.isHighYield && <span className="font-medium text-mark-foreground">{t.review.highYield}</span>}
                             {topicPath(card.topicId, snapshot.topics) ?? card.title}
                             <span className="tabular-nums ml-auto">{format(t.lab.weakness, { n: score.toFixed(1) })}</span>
                           </span>
-                          <MathText text={card.questionLatex} className="line-clamp-2 text-[13px]" />
+                          <MathText text={card.questionLatex} className="line-clamp-2 text-[14px]" />
                         </span>
                       </button>
                     </li>

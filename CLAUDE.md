@@ -72,37 +72,37 @@ Package manager: **npm**. Path alias: `@/*` → `src/*`.
 
 ---
 
-## 2. Design system — Paper & Dark
+## 2. Design system — appearance (style × mode × accent × layout)
 
-**[`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) is the source of truth** for color, type, spacing, motion and copy. Summary:
+**[`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) is the source of truth** (read §2.5 before touching themes). Summary:
 
-- **Two themes** via `data-theme` on `<html>`: `light` ("Paper": warm off-white, never pure white) and `dark` (warm graphite,
-  never pure black). `User.theme` still stores the Prisma enum; `THEME_CHOICES` offers `LIGHT` and `DARK_GRAY`, and the
-  legacy `OBSIDIAN` value renders as Dark (`THEME_ATTRIBUTE`). New accounts default to `LIGHT`.
-- **Tokens** are CSS variables in `globals.css`, authored in `oklch()`, one declaration per line.
-  `tests/design-tokens.test.ts` parses that file and enforces the WCAG contrast table — change a token and the test tells
-  you if a pair broke. **Never hard-code hex values in components**; use the Tailwind tokens (`bg-background`, `bg-sunken`,
-  `bg-card`, `border-border`, `text-muted-foreground`, `text-subtle`, `text-brand`, `bg-accent`, `bg-mark-soft`, …).
-- **Roles**: `primary` is ink (solid `foreground`) for the one primary action per view; `brand` (ink blue) is for state only —
-  focus, selection, links, progress; `mark` (highlighter yellow) is only for snipped regions and the priority flag.
-- **Type**: Inter for interface, Source Serif 4 for titles and question/solution content, JetBrains Mono for LaTeX source.
-  Use the type-role utilities, sentence case, and line-height ≥ 1.25 wherever Vietnamese can appear.
-- **Icons**: Lucide at a 1.5 stroke (global CSS). Only where functional: sidebar destinations, toolbar tools, icon-only
-  buttons (always with an accessible name). No icons in headings, badges, labelled buttons or empty states.
+- **Four independent settings, each on its own attribute**: `data-mode` (light | dark; account setting `User.theme`; `THEME_ATTRIBUTE`, the legacy `OBSIDIAN` renders as Dark),
+  `data-theme` (style: minimal | doodle | cafe | brutalism | stitch | retro | tetris; localStorage `vl:theme-style`), `data-layout` (sidebar | topbar; `vl:layout`), and the accent
+  (`vl:accent`, `vl:accent-vars` → `<style id="vl-accent">`). Pure logic, constants and the pre-hydration `bootScript()` are in `src/lib/appearance.ts`; hooks in `src/components/use-appearance.ts`
+  (`useApplyAppearance()` is mounted in `AppShell`); the picker UI is in `settings-view.tsx`.
+- **Tokens** are CSS variables in `globals.css` as `#RRGGBB` or `oklch()`, one declaration per line. A style's CSS lives only in `[data-theme="x"]` / `[data-theme="x"][data-mode="y"]` blocks and
+  sets only `--variables`. `tests/design-tokens.test.ts` parses the file and enforces WCAG AA for every style × mode and a sweep of accent colours, plus that isolation.
+  **Never hard-code colors, radii, border widths or shadows in components**: use the Tailwind tokens (`bg-background`, `bg-card`, `bg-primary`, `bg-accent`, `border-border`, `border-input`,
+  `text-muted-foreground`, `text-brand`, …), `rounded-*`, `border-2` and `shadow-*`, which all follow the active style.
+- **Roles**: `primary` is the accent **fill** (one primary action per view), never text (use `text-brand`); `brand` is state (focus, links, progress); `mark` (highlighter yellow) is only for snipped regions and the priority flag.
+  The accent group (`primary`, `primary-foreground`, `brand`, `brand-hover`, `accent`, `accent-foreground`) is identical in every style and derived for AA (`deriveAccentVars`).
+- **Type**: **one** face for every language and style: Inter (Latin + Vietnamese subsets), JetBrains Mono for LaTeX source. No handwriting/display fonts, no font switching by language. Use the type-role
+  utilities (`text-display` / `title` / `heading` / `reading` / `caption` / `overline`), sentence case, line-height ≥ 1.25.
+- **Icons**: Lucide, stroke from the style (`--icon-stroke`). Only where functional: sidebar destinations, toolbar tools, icon-only buttons (always with an accessible name). No icons in headings, badges, labelled buttons or empty states.
 - **No emoji anywhere** in the interface, and one language per string (enforced by `tests/i18n.test.ts`).
-- **Motion**: import presets from `src/lib/motion.ts` (`spring.snappy` / `smooth` / `lively`, `fade`); use `layoutId` for
-  moving selection (sidebar pill, segmented controls). `MotionConfig reducedMotion="user"` is set in the shell.
-- **Surfaces**: `<Surface>` (`src/components/crosshair-card.tsx`; `CrosshairCard` is a legacy alias) is the resting card:
-  hairline, 12px radius, `shadow-xs`.
+- **Motion**: import presets from `src/lib/motion.ts` (`spring.snappy` / `smooth` / `lively`, `fade`); use `layoutId` for moving selection. Buttons lift (`--lift`) and press (`--press`) per style.
+  `MotionConfig reducedMotion="user"` is set in the shell.
+- **Surfaces**: `<Surface>` (`src/components/crosshair-card.tsx`; `CrosshairCard` is a legacy alias) is the resting card: `--bw` outline, `rounded-lg`, `shadow-xs`.
 
 ### Layout
-- `AppShell` = collapsible left sidebar (248px ↔ 60px rail, state in `localStorage`) + content. Nothing floats over content;
-  under 1024px the sidebar is a sheet opened from a slim top bar. The sidebar's subject list is the **global subject filter**
+- `AppShell` = collapsible left sidebar (248px ↔ 60px rail, state in `localStorage`) + content, or, with the "Top bar" layout, a sticky horizontal bar (`TopNavBody`) with the same destinations, a subject menu
+  and the footer controls. Both are rendered and CSS (`[data-layout]`, `.vl-rail` / `.vl-topnav`) shows one, so there is no flash. Under 1024px a slim top bar opens a sheet whatever the setting.
+  `--chrome` is the height of the bar above the content (full-height workspaces and sticky headers subtract it). Nothing floats over content. The sidebar's subject list is the **global subject filter**
   (`activeSubjectId`); theme, language and account controls live in its footer.
 - Routes: `src/app/(auth)/` (login, register: no shell), `src/app/(app)/` (provider + sidebar shell), and inside it
   `(pages)/` (padded, centered column) and `sources/[id]` (the full-viewport workspace).
 - Page pattern: one serif `text-display` title, one sentence of description, primary action top-right; sections are
-  separated by a `text-overline` label and a hairline.
+  separated by a `text-overline` label and a dashed rule.
 
 ---
 

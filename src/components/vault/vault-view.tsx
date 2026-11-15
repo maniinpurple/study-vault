@@ -77,21 +77,21 @@ export function VaultView() {
       </header>
 
       {/* Controls: sticky, so grouping and filters stay at hand while scrolling the grid. */}
-      <div className="sticky top-12 z-20 -mx-4 space-y-3 border-b border-border bg-background/92 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:top-0 lg:-mx-8 lg:px-8">
+      <div className="sticky top-(--chrome) z-20 -mx-4 space-y-3 border-b border-border bg-background/92 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative min-w-52 flex-1">
             <span className="sr-only">{t.vault.search}</span>
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-subtle" aria-hidden />
-            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.vault.search} className="h-8 w-full rounded-md bg-muted pr-3 pl-8 text-sm placeholder:text-subtle hover:bg-secondary focus-visible:bg-secondary" />
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.vault.search} className="h-9 w-full rounded-md border-2 border-input bg-card pr-3 pl-8 text-sm placeholder:text-subtle focus-visible:shadow-xs" />
           </label>
-          <Select aria-label={t.vault.sortBy} value={sort} onChange={(e) => setSort(e.target.value as VaultSort)} className="h-8 w-auto text-[13px]">
+          <Select aria-label={t.vault.sortBy} value={sort} onChange={(e) => setSort(e.target.value as VaultSort)} className="h-8 w-auto text-[14px]">
             {VAULT_SORTS.map((s) => (
               <option key={s} value={s}>
                 {t.vault.sort[s]}
               </option>
             ))}
           </Select>
-          <Select aria-label={t.vault.filterStatus} value={status ?? ""} onChange={(e) => setStatus((e.target.value || null) as ReviewStatus | null)} className="h-8 w-auto text-[13px]">
+          <Select aria-label={t.vault.filterStatus} value={status ?? ""} onChange={(e) => setStatus((e.target.value || null) as ReviewStatus | null)} className="h-8 w-auto text-[14px]">
             <option value="">{t.vault.anyStatus}</option>
             {REVIEW_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -103,7 +103,7 @@ export function VaultView() {
             type="button"
             aria-pressed={priorityOnly}
             onClick={() => setPriorityOnly((v) => !v)}
-            className={cn("flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[13px] transition-colors", priorityOnly ? "border-transparent bg-mark-soft font-medium text-mark-foreground" : "border-border text-muted-foreground hover:text-foreground")}
+            className={cn("flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[14px] transition-colors", priorityOnly ? "border-transparent bg-mark-soft font-medium text-mark-foreground" : "border-border text-muted-foreground hover:text-foreground")}
           >
             <Flag className="size-3.5" aria-hidden />
             {t.vault.priorityOnly}
@@ -129,7 +129,7 @@ export function VaultView() {
             <LayoutGroup id="vault-group">
               <div role="radiogroup" aria-label={t.vault.groupBy} className="flex rounded-lg bg-muted p-0.5">
                 {VAULT_GROUPS.map((g) => (
-                  <button key={g} type="button" role="radio" aria-checked={group === g} onClick={() => setGroup(g)} className={cn("relative h-7 rounded-md px-2.5 text-[13px] transition-colors", group === g ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                  <button key={g} type="button" role="radio" aria-checked={group === g} onClick={() => setGroup(g)} className={cn("relative h-7 rounded-md px-2.5 text-[14px] transition-colors", group === g ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>
                     {group === g && <motion.span layoutId="thumb" transition={spring.snappy} className="absolute inset-0 rounded-md bg-card shadow-xs" aria-hidden />}
                     <span className="relative">{t.vault.group[g]}</span>
                   </button>
@@ -321,7 +321,7 @@ function NewProblemForm({ defaultSubjectId, onClose }: { defaultSubjectId: strin
         </Select>
       </Field>
       <Field label={t.problem.question} htmlFor={`${id}-question`}>
-        <Textarea id={`${id}-question`} data-autofocus value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t.problem.questionPlaceholder} rows={4} spellCheck={false} className="font-mono text-[13px]" />
+        <Textarea id={`${id}-question`} data-autofocus value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t.problem.questionPlaceholder} rows={4} spellCheck={false} className="font-mono text-[14px]" />
       </Field>
       {question.trim() && <MathText text={question} className="rounded-md border border-border p-3 text-reading" />}
 

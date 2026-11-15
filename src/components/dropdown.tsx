@@ -49,7 +49,7 @@ export function Dropdown({
         <div
           id={id}
           className={cn(
-            "absolute z-50 min-w-48 rounded-lg border border-border bg-popover p-1.5 shadow-lg",
+            "absolute z-50 min-w-48 rounded-lg border-2 border-border bg-popover p-1.5 shadow-lg",
             side === "top" ? "bottom-full mb-2" : "top-full mt-2",
             align === "end" ? "right-0" : "left-0",
             className,

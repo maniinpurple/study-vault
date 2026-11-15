@@ -29,7 +29,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     <div className="w-full max-w-sm space-y-8">
       <div className="space-y-6">
         <p className="flex items-center gap-2 font-serif text-[17px] font-medium">
-          <span aria-hidden className="grid size-6 place-items-center rounded-md bg-primary text-[13px] font-semibold text-primary-foreground">
+          <span aria-hidden className="grid size-6 place-items-center rounded-md bg-primary text-[14px] font-semibold text-primary-foreground">
             V
           </span>
           {t.app.name}

@@ -163,7 +163,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Reflect the account's prefs on <html> and mirror them for the pre-hydration script (no flash on reload).
   React.useEffect(() => {
     const root = document.documentElement;
-    root.dataset.theme = THEME_ATTRIBUTE[theme];
+    root.dataset.mode = THEME_ATTRIBUTE[theme];
     root.lang = LOCALE_TAG[uiLanguage].split("-")[0];
     writeStorage(STORAGE_KEYS.prefs, JSON.stringify({ theme: THEME_ATTRIBUTE[theme], lang: root.lang }));
   }, [theme, uiLanguage]);

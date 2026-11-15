@@ -124,7 +124,7 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
 
   if (!upload) {
     return (
-      <div className="grid h-[calc(100dvh-3rem)] place-items-center px-6 lg:h-dvh">
+      <div className="grid h-[calc(100dvh-var(--chrome))] place-items-center px-6">
         <div className="space-y-3 text-center">
           <p className="text-sm text-muted-foreground">{t.sources.notFound}</p>
           <Link href="/sources" className="text-sm font-medium text-brand hover:underline">
@@ -210,10 +210,10 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
     snips.flatMap((card) => cropRegions(card).filter((r) => r.page === page).map((r) => ({ id: card.id, number: numbers.get(card.id) ?? 0, box: { x: r.x, y: r.y, w: r.w, h: r.h } })));
   const pendingOf = (page: number): PendingRegion[] =>
     ordered.flatMap((r, i) => (r.page === page ? [{ key: r.key, number: i + 1, box: { x: r.x, y: r.y, w: r.w, h: r.h }, newest: r.key === newest?.key }] : []));
-  const tool = (active: boolean) => cn("relative flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors", active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground");
+  const tool = (active: boolean) => cn("relative flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[14px] transition-colors", active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground");
 
   return (
-    <div className="flex h-[calc(100dvh-3rem)] flex-col lg:h-dvh">
+    <div className="flex h-[calc(100dvh-var(--chrome))] flex-col">
       {/* Toolbar */}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2">
         <Link href="/sources" aria-label={t.sources.back} title={t.sources.back} className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
@@ -226,10 +226,10 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => title.trim() && title.trim() !== upload.title && void actions.updateSource(upload.id, { title })}
           onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-          className="h-7 min-w-0 flex-1 truncate rounded-md bg-transparent px-1.5 font-serif text-[17px] font-medium hover:bg-muted focus-visible:bg-muted sm:max-w-sm"
+          className="h-7 min-w-0 flex-1 truncate rounded-md border-2 border-transparent bg-transparent px-1.5 font-serif text-[18px] hover:border-border hover:bg-card focus-visible:border-border focus-visible:bg-card sm:max-w-sm"
         />
         {subjects.length > 0 && (
-          <Select aria-label={t.problem.subject} value={subjectId ?? ""} onChange={(e) => void actions.updateSource(upload.id, { subjectId: e.target.value })} className="h-7 w-auto max-w-40 text-[13px]">
+          <Select aria-label={t.problem.subject} value={subjectId ?? ""} onChange={(e) => void actions.updateSource(upload.id, { subjectId: e.target.value })} className="h-7 w-auto max-w-40 text-[14px]">
             {subjects.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}

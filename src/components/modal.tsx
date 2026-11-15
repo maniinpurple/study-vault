@@ -48,7 +48,7 @@ export function Modal({
         if (e.target === ref.current) onClose();
       }}
       className={cn(
-        "modal fixed top-1/2 left-1/2 m-0 w-[min(32rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-border bg-popover p-0 text-foreground shadow-lg",
+        "modal fixed top-1/2 left-1/2 m-0 w-[min(32rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border-2 border-border bg-popover p-0 text-foreground shadow-lg",
         className,
       )}
     >

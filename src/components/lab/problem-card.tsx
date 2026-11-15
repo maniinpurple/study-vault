@@ -55,7 +55,7 @@ export function ProblemCard({ problem, subject, highlight }: { problem: AiSynthe
               {t.lab.flagged}
             </Badge>
           )}
-          <span className="tabular-nums ml-auto text-[11px] text-muted-foreground">{dateFmt.format(problem.createdAt)}</span>
+          <span className="tabular-nums ml-auto text-[14px] text-muted-foreground">{dateFmt.format(problem.createdAt)}</span>
         </div>
 
         <MathText text={problem.questionLatex} className="text-reading" />
@@ -120,7 +120,7 @@ export function ProblemCard({ problem, subject, highlight }: { problem: AiSynthe
           <div className="space-y-3">
             {problem.answerLatex && (
               <section className="rounded-lg border border-primary/30 bg-accent/40 p-3">
-                <h3 className="text-[11px] font-medium text-muted-foreground">{t.lab.answer}</h3>
+                <h3 className="text-[14px] font-medium text-muted-foreground">{t.lab.answer}</h3>
                 <MathText text={problem.answerLatex} />
               </section>
             )}
@@ -202,7 +202,7 @@ function ReportForm({ problem, subject, onDone }: { problem: AiSynthesizedProble
   if (result) {
     return (
       <div className="space-y-3" role="status">
-        <p className={cn("flex items-center gap-2 text-sm font-medium", result.verdict === "FIXED" ? "text-primary" : "text-foreground")}>
+        <p className={cn("flex items-center gap-2 text-sm font-medium", result.verdict === "FIXED" ? "text-brand" : "text-foreground")}>
           {result.verdict === "FIXED" ? t.lab.fixed : t.lab.noError}
         </p>
         <MathText text={result.explanation} className="rounded-lg border border-border bg-muted/30 p-3" />

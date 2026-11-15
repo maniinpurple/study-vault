@@ -148,7 +148,7 @@ export function SourcePage({ doc, page, scrollRoot, snips, pending, toolbar, sel
               onClick={() => onSelect(snip.id)}
               className={cn("absolute inset-0 cursor-pointer rounded-[3px] border transition-colors", selected ? "border-brand ring-2 ring-brand/40" : "border-mark-foreground/40 hover:border-mark-foreground")}
             >
-              <span className={cn("absolute -top-px -left-px rounded-br-md rounded-tl-[3px] px-1.5 py-0.5 text-[11px] leading-none font-semibold tabular-nums", selected ? "bg-brand text-brand-foreground" : "bg-mark text-neutral-900")}>
+              <span className={cn("absolute -top-px -left-px rounded-br-md rounded-tl-[3px] px-1.5 py-0.5 text-[12px] leading-none font-semibold tabular-nums", selected ? "bg-brand text-brand-foreground" : "bg-mark text-neutral-900")}>
                 {snip.number}
               </span>
             </button>
@@ -159,7 +159,7 @@ export function SourcePage({ doc, page, scrollRoot, snips, pending, toolbar, sel
       {pending.map((part) => (
         <div key={part.key} className="absolute" style={{ left: pct(part.box.x), top: pct(part.box.y), width: pct(part.box.w), height: pct(part.box.h) }}>
           <div aria-label={labels.part(part.number)} className="pointer-events-none absolute inset-0 rounded-[3px] border-2 border-dashed border-brand bg-brand/10">
-            <span className="absolute -top-px -left-px rounded-br-md rounded-tl-[2px] bg-brand px-1.5 py-0.5 text-[11px] leading-none font-semibold text-brand-foreground tabular-nums">{part.number}</span>
+            <span className="absolute -top-px -left-px rounded-br-md rounded-tl-[2px] bg-brand px-1.5 py-0.5 text-[12px] leading-none font-semibold text-brand-foreground tabular-nums">{part.number}</span>
           </div>
           {part.newest && <FloatingToolbar box={part.box} toolbar={toolbar} />}
         </div>
