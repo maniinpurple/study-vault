@@ -134,6 +134,12 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
 - Each key carries its own `aiOutputLanguage` and `defaultModel`.
 
 ### 4.2 Sources → in-document snipping (`/sources`, `/sources/[id]`)
+- **Upload flow**: choosing files opens an upload dialog (`upload-dialog.tsx`) with a title, a subject and **"Tự động điền bằng AI"**
+  (the AI classifier skill: page 1 → `{ title, subject }`, matched to the student's subjects by `matchSubject`; an unknown subject can be
+  created in one click). **Word (.docx)** is supported by converting in the browser (`docx-source.ts`: mammoth → sanitised HTML →
+  A4 pages via `docx-layout.ts` → `html2canvas-pro`), then stored as an ordinary IMAGE source of page JPEGs — so viewer, snipping
+  and stitching need no special case and the DB enum is unchanged. Limits: Word equations (OMML) are dropped by mammoth, and the
+  original .docx is not kept.
 - **Sources library** (`/sources`): upload a PDF or a set of photos → `ExamUpload` (deduplicated by sha256) with its files
   and a page-1 thumbnail (`uploadThumbnailPath`, derived from the id — no column). A source belongs to a subject.
 - **Workspace** (`/sources/[id]`): split screen. Left: the document, continuous scroll, pages rendered lazily with PDF.js.
@@ -160,9 +166,21 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
   (number variants, the synthesizer) must handle image-only problems.
 - Deleting a source removes its files; its problems stay in the vault with `examUploadId = null`.
 
+### 4.2a AI skills (all use the student's own key; prompts in `skills-prompt.ts` / `ocr-prompt.ts`, runners in `ai-jobs.ts`)
+- **Classifier** (`/api/ai/classify`): upload dialog. **Reconstruction** (`/api/ai/ocr`, "Tái tạo đề (AI)"): a snippet's image → Markdown/LaTeX,
+  shown in an editable box with a live `react-markdown` + `remark-math` + `rehype-katex` preview (`markdown-math.tsx`) so OCR mistakes can be
+  fixed by hand; it never overwrites existing text. **Analysis** (`/api/ai/analyze`, `{ type, core_concept }`): the review column's
+  "Phân tích dạng toán" card (`problem-analysis.tsx`); it states the problem type and core formula without solving.
+- Routes take a **key id** (never a key); `resolveCredential()` loads and decrypts the signed-in user's own key. They work with any
+  provider the student configured (Gemini included) because the provider layer is shared.
+
 ### 4.2b Problem Vault (`/vault`)
 - Every saved problem in one place, each card showing the question (image or formatted math) with its solution and
   takeaway. Standalone problems can be added (text and/or image).
+- **Performance**: both lists load progressively (`load-more.tsx`: a visible count that grows by a page when you scroll near the end,
+  resetting on any search/sort/filter/view change; page sizes in `lib/vault.ts`). Images use `next/image` via `StoredImage` — lazy by default
+  and **`unoptimized` on purpose**: Next's optimizer fetches without the user's session and caches for everyone, so private files are served
+  as-is and cached by the browser (`/api/files` sends an immutable private header). Use `fill` + a `relative` parent for thumbnails.
 - Three views — Grid, List, Detailed (`problem-views.tsx`) — chosen with the shared `ViewToggle` and remembered per device in
   `localStorage` (`useStoredChoice`, key `vl:vault-view`). The Sources library has the same toggle (`vl:sources-view`).
 - `src/lib/vault.ts` (pure, tested) filters (subject, search ignoring diacritics, priority, review status), sorts and

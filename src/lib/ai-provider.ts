@@ -1,10 +1,12 @@
 import "server-only";
 
+import { setDefaultResultOrder } from "node:dns";
+
 import { z } from "zod";
 
 import { buildPrompt, matchesLanguage, selectModel, TASK_TIER, type AiTask, type LanguageMode } from "@/lib/ai-prompt";
 import { decryptApiKey } from "@/lib/crypto";
-import { type AiModelTier, type AiProvider, type Language } from "@/lib/constants";
+import { normalizeModelId, type AiModelTier, type AiProvider, type Language } from "@/lib/constants";
 
 /**
  * Unified BYOK adapter over Gemini, OpenAI, Anthropic and OpenAI-compatible endpoints.
@@ -52,7 +54,7 @@ export interface AiResult {
 
 export class AiProviderError extends Error {
   constructor(
-    readonly code: "BAD_KEY" | "BAD_BASE_URL" | "NO_MODEL" | "PROVIDER_HTTP" | "NETWORK" | "EMPTY" | "INVALID_JSON" | "LANGUAGE_DRIFT" | "UNVERIFIED",
+    readonly code: "BAD_KEY" | "BAD_BASE_URL" | "NO_MODEL" | "PROVIDER_HTTP" | "NETWORK" | "TIMEOUT" | "EMPTY" | "INVALID_JSON" | "LANGUAGE_DRIFT" | "UNVERIFIED",
     message: string,
     readonly status?: number,
   ) {
@@ -62,6 +64,21 @@ export class AiProviderError extends Error {
 }
 
 const TIMEOUT_MS = { LIGHT: 45_000, HEAVY: 120_000 } as const;
+/** A connectivity check is one tiny completion; if it takes longer than this the key or the network is the problem. */
+export const CONNECTION_TEST_TIMEOUT_MS = 10_000;
+
+/** Longest a provider call may take before it is abandoned (the request hangs up and the caller gets `TIMEOUT`). */
+export function timeoutFor(task: AiTask, tier: AiModelTier): number {
+  return task === "connection_test" ? CONNECTION_TEST_TIMEOUT_MS : TIMEOUT_MS[tier];
+}
+
+// Some hosts resolve Google's endpoints to IPv6 addresses they cannot actually reach, and Node then waits for the
+// connection to fail before trying IPv4 — a hang that looks like a timeout. Prefer IPv4 so calls connect straight away.
+try {
+  setDefaultResultOrder("ipv4first");
+} catch {
+  /* unsupported runtime: keep the default */
+}
 
 const PRIVATE_HOST = /^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:)/i;
 
@@ -106,7 +123,8 @@ export function buildProviderCall(
   if (provider === "GEMINI") {
     const root = baseUrl ? assertSafeBaseUrl(baseUrl).toString().replace(/\/+$/, "") : "https://generativelanguage.googleapis.com/v1beta";
     return {
-      url: `${root}/models/${encodeURIComponent(model)}:generateContent`,
+      // The REST path is `models/{id}:generateContent`: the `models/` prefix belongs to the URL, never to the stored id.
+      url: `${root}/models/${encodeURIComponent(normalizeModelId(model))}:generateContent`,
       headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
       body: {
         systemInstruction: { parts: [{ text: req.system }] },
@@ -196,33 +214,45 @@ export async function runAiTask(credential: AiCredential, request: AiRequest, fe
   const { system, prompt } = buildPrompt({ system: request.system, prompt: request.prompt, language: request.language, verbatim: request.verbatim, languageMode: request.languageMode });
   const call = buildProviderCall(credential.provider, apiKey, model, { ...request, system, prompt }, credential.baseUrl);
 
+  // One AbortController covers the whole exchange (connecting, waiting for the model, and reading the reply), so a call can
+  // never hang the route: when time runs out the request is cut and the caller gets a clean TIMEOUT error.
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutFor(request.task, tier));
+
   let response: Response;
+  let payload: unknown;
+  let failure = "";
   try {
-    response = await fetchImpl(call.url, {
-      method: "POST",
-      headers: call.headers,
-      body: JSON.stringify(call.body),
-      signal: AbortSignal.timeout(TIMEOUT_MS[tier]),
-      redirect: "error",
-    });
-  } catch {
-    throw new AiProviderError("NETWORK", "Could not reach the AI provider");
-  }
-
-  if (!response.ok) {
-    // Provider error bodies can echo request details; surface only the status and the provider's short message.
-    let detail = "";
     try {
-      const body = rec(await response.json());
-      detail = str(rec(body?.error)?.message) ?? str(body?.message) ?? "";
+      response = await fetchImpl(call.url, { method: "POST", headers: call.headers, body: JSON.stringify(call.body), signal: controller.signal, redirect: "error" });
     } catch {
-      /* non-JSON error body */
+      throw new AiProviderError(timedOut ? "TIMEOUT" : "NETWORK", timedOut ? "The AI provider took too long to answer" : "Could not reach the AI provider");
     }
-    const safe = detail.replaceAll(apiKey, "[redacted]").slice(0, 200);
-    throw new AiProviderError("PROVIDER_HTTP", safe || `Provider returned HTTP ${response.status}`, response.status);
+
+    if (!response.ok) {
+      // Provider error bodies can echo request details; surface only the status and the provider's short message.
+      try {
+        const body = rec(await response.json());
+        failure = str(rec(body?.error)?.message) ?? str(body?.message) ?? "";
+      } catch {
+        /* non-JSON error body, or the exchange timed out while reading it */
+      }
+      if (timedOut) throw new AiProviderError("TIMEOUT", "The AI provider took too long to answer");
+      const safe = failure.replaceAll(apiKey, "[redacted]").slice(0, 200);
+      throw new AiProviderError("PROVIDER_HTTP", safe || `Provider returned HTTP ${response.status}`, response.status);
+    }
+
+    payload = await response.json().catch(() => undefined);
+    if (timedOut) throw new AiProviderError("TIMEOUT", "The AI provider took too long to answer");
+  } finally {
+    clearTimeout(timer);
   }
 
-  const text = call.extract(await response.json().catch(() => undefined))?.trim();
+  const text = call.extract(payload)?.trim();
   if (!text) throw new AiProviderError("EMPTY", "The AI provider returned an empty response");
   return { text, model, tier };
 }

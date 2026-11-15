@@ -2,9 +2,9 @@
  * Pure (client-safe) AI helpers: task → tier/model routing, language directives and drift detection.
  * The network adapter lives in `ai-provider.ts` (server-only).
  */
-import { AI_PROVIDER_META, type AiModelTier, type AiProvider, type Language } from "@/lib/constants";
+import { AI_PROVIDER_META, normalizeModelId, type AiModelTier, type AiProvider, type Language } from "@/lib/constants";
 
-export const AI_TASKS = ["ocr", "tag_suggestion", "memory_sync", "mutation", "synthesis", "connection_test"] as const;
+export const AI_TASKS = ["ocr", "classify", "analysis", "tag_suggestion", "memory_sync", "mutation", "synthesis", "connection_test"] as const;
 export type AiTask = (typeof AI_TASKS)[number];
 
 /**
@@ -13,6 +13,8 @@ export type AiTask = (typeof AI_TASKS)[number];
  */
 export const TASK_TIER: Record<AiTask, AiModelTier> = {
   ocr: "LIGHT",
+  classify: "LIGHT",
+  analysis: "LIGHT",
   tag_suggestion: "LIGHT",
   memory_sync: "LIGHT",
   mutation: "LIGHT",
@@ -45,10 +47,11 @@ export interface ModelSelectionKey {
 export function selectModel(task: AiTask, key: ModelSelectionKey): string {
   const meta = AI_PROVIDER_META[key.provider];
   const byTier = (tier: AiModelTier) => meta.models.find((m) => m.tier === tier)?.id;
-  const configured = key.defaultModel ?? undefined;
+  const configured = key.defaultModel ? normalizeModelId(key.defaultModel) : undefined;
+  const vision = key.visionModel ? normalizeModelId(key.visionModel) : undefined;
 
   if (task === "ocr") {
-    const model = key.visionModel ?? configured ?? byTier("LIGHT");
+    const model = vision ?? configured ?? byTier("LIGHT");
     if (model) return model;
   } else if (TASK_TIER[task] === "LIGHT") {
     const configuredTier = meta.models.find((m) => m.id === configured)?.tier;

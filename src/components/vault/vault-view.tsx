@@ -14,6 +14,7 @@ import { ProblemBox, ProblemRow, ProblemRowHeader, ProblemTile } from "@/compone
 import { Button } from "@/components/ui/button";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import { useObjectUrl } from "@/components/use-object-url";
+import { LoadMore, useVisibleCount } from "@/components/load-more";
 import { useStoredChoice } from "@/components/use-stored-choice";
 import { ViewToggle } from "@/components/view-toggle";
 import { STORAGE_KEYS } from "@/lib/constants";
@@ -27,7 +28,7 @@ import { timezoneOffsetMinutes } from "@/lib/stats";
 import { tagDisplayName } from "@/lib/tags";
 import { VIEW_MODES, type ViewMode } from "@/lib/view-mode";
 import { cn } from "@/lib/utils";
-import { filterProblems, groupProblems, sortProblems, VAULT_GROUPS, VAULT_SORTS, type TimeBucket, type VaultGroup, type VaultSort } from "@/lib/vault";
+import { filterProblems, groupProblems, sortProblems, takeSections, VAULT_PAGE_SIZE, VAULT_GROUPS, VAULT_SORTS, type TimeBucket, type VaultGroup, type VaultSort } from "@/lib/vault";
 
 export function VaultView() {
   const { snapshot, user, t, loadedAt, activeSubjectId } = useVault();
@@ -48,6 +49,9 @@ export function VaultView() {
   const order = group === "topic" ? snapshot.topics.map((x) => x.id) : group === "source" ? snapshot.examUploads.map((x) => x.id) : group === "tag" ? snapshot.tags.map((x) => x.id) : [];
   const sections = groupProblems(visible, group, ctx, order);
   const filtered = query.trim() !== "" || status !== null || priorityOnly;
+  const pageSize = VAULT_PAGE_SIZE[view];
+  const [shown, showMore] = useVisibleCount(`${group}|${sort}|${status}|${priorityOnly}|${query}|${scope?.id ?? ""}|${view}`, pageSize);
+  const { sections: pageSections, remaining } = takeSections(sections, shown);
   const editing = editingId ? (snapshot.cards.find((c) => c.id === editingId) ?? null) : null;
 
   function sectionLabel(key: string | null): string {
@@ -150,7 +154,7 @@ export function VaultView() {
         </div>
       ) : (
         <div className="space-y-10">
-          {sections.map((section) => (
+          {pageSections.map((section) => (
             <section key={section.key ?? "none"} aria-label={sectionLabel(section.key)} className="space-y-4">
               <div className="flex items-center gap-3">
                 <h2 className="text-overline">{sectionLabel(section.key)}</h2>
@@ -173,6 +177,7 @@ export function VaultView() {
               </div>
             </section>
           ))}
+          <LoadMore remaining={remaining} step={pageSize} onMore={showMore} />
         </div>
       )}
 

@@ -3,13 +3,13 @@
 import { Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 
-import { useVault } from "@/components/app-provider";
+import { ActionError, useVault } from "@/components/app-provider";
 import { CrosshairCard } from "@/components/crosshair-card";
 import { Modal } from "@/components/modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
-import { AI_PROVIDER_META, AI_PROVIDERS, type AiProvider, type Language } from "@/lib/constants";
+import { AI_PROVIDER_META, AI_PROVIDERS, normalizeModelId, type AiProvider, type Language } from "@/lib/constants";
 import { format } from "@/lib/i18n";
 import type { UserApiKey } from "@/lib/repo/types";
 
@@ -53,7 +53,7 @@ function AddKeyForm({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       // The plaintext key is sent once, to a server action that encrypts it before it is stored.
-      await actions.createApiKey({
+      const created = await actions.createApiKey({
         provider: form.provider,
         label: form.label,
         apiKey: form.apiKey,
@@ -64,6 +64,8 @@ function AddKeyForm({ onClose }: { onClose: () => void }) {
       });
       setForm(EMPTY_FORM); // drop the plaintext key from memory immediately
       onClose();
+      // Check the new key right away, using the id the server just returned for it (never an id from earlier state).
+      void requestKeyTest(created.id).then((outcome) => recordKeyTest(actions, created.id, outcome));
     } catch (err) {
       const code = err instanceof Error ? err.message : "";
       const message = code === "DUPLICATE_LABEL" ? { label: t.keys.duplicateLabel } : { form: code === "ENCRYPT" ? t.keys.encryptFailed : t.common.errorGeneric };
@@ -134,36 +136,67 @@ function AddKeyForm({ onClose }: { onClose: () => void }) {
   );
 }
 
+type Actions = ReturnType<typeof useVault>["actions"];
+type TestOutcome = { ok: true; model: string } | { ok: false; error: string; message?: string };
+
+/** Ask the server to run one tiny completion with the key `keyId`. Never throws: every failure is an outcome. */
+async function requestKeyTest(keyId: string, signal?: AbortSignal): Promise<TestOutcome> {
+  try {
+    const res = await fetch("/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ keyId }), signal });
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; model?: string; error?: string; message?: string } | null;
+    if (res.ok && body?.ok) return { ok: true, model: body.model ?? "" };
+    return { ok: false, error: body?.error ?? "UNKNOWN", message: body?.message };
+  } catch {
+    return { ok: false, error: "NETWORK" };
+  }
+}
+
+/**
+ * Record a test result on the key it belongs to. The id is the one the test was started with, and the write is skipped
+ * (or its "not found" ignored) when that key has been deleted in the meantime — a result must never be written to a key
+ * that no longer exists, nor to a different one.
+ */
+async function recordKeyTest(actions: Actions, keyId: string, outcome: TestOutcome, stillExists: () => boolean = () => true): Promise<void> {
+  if (!stillExists()) return;
+  const patch = outcome.ok ? { lastValidatedAt: new Date(), lastUsedAt: new Date(), lastErrorMessage: null } : { lastErrorMessage: outcome.error };
+  try {
+    await actions.updateApiKey(keyId, patch);
+  } catch (err) {
+    if (!(err instanceof ActionError && err.code === "NOT_FOUND")) console.error("[vaultlearn] could not record the key test", err);
+  }
+}
+
 type TestState = { status: "idle" | "running" | "ok" | "fail"; message?: string };
 
 function KeyCard({ apiKey }: { apiKey: UserApiKey }) {
-  const { t, actions, locale } = useVault();
+  const { snapshot, t, actions, locale } = useVault();
   const [test, setTest] = React.useState<TestState>({ status: "idle" });
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const meta = AI_PROVIDER_META[apiKey.provider];
-  const model = meta.models.find((m) => m.id === apiKey.defaultModel);
+  const model = meta.models.find((m) => m.id === (apiKey.defaultModel ? normalizeModelId(apiKey.defaultModel) : null));
   const errors = t.keys.errors as Record<string, string>;
+  const abortRef = React.useRef<AbortController | null>(null);
+  // Always the CURRENT list of keys, read when a test finishes (a closure would hold the list from when it started).
+  const liveKeyIds = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    liveKeyIds.current = new Set(snapshot.apiKeys.map((k) => k.id));
+  });
+  // A test still running when this card goes away (the key was deleted) is cancelled and its result discarded.
+  React.useEffect(() => {
+    const abort = abortRef;
+    return () => abort.current?.abort();
+  }, []);
 
   async function runTest() {
+    const keyId = apiKey.id; // fixed for this run
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setTest({ status: "running" });
-    try {
-      const res = await fetch("/api/ai/test", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ keyId: apiKey.id }),
-      });
-      const body = (await res.json()) as { ok?: boolean; model?: string; error?: string; message?: string };
-      if (res.ok && body.ok) {
-        setTest({ status: "ok", message: format(t.keys.testOk, { model: body.model ?? "" }) });
-        await actions.updateApiKey(apiKey.id, { lastValidatedAt: new Date(), lastUsedAt: new Date(), lastErrorMessage: null });
-      } else {
-        const label = errors[body.error ?? "UNKNOWN"] ?? errors.UNKNOWN;
-        setTest({ status: "fail", message: `${label}${body.error === "PROVIDER_HTTP" && body.message ? ` — ${body.message}` : ""}` });
-        await actions.updateApiKey(apiKey.id, { lastErrorMessage: body.error ?? "UNKNOWN" });
-      }
-    } catch {
-      setTest({ status: "fail", message: errors.NETWORK });
-    }
+    const outcome = await requestKeyTest(keyId, controller.signal);
+    if (controller.signal.aborted) return;
+    setTest(outcome.ok ? { status: "ok", message: format(t.keys.testOk, { model: outcome.model }) } : { status: "fail", message: `${errors[outcome.error] ?? errors.UNKNOWN}${outcome.error === "PROVIDER_HTTP" && outcome.message ? ` — ${outcome.message}` : ""}` });
+    await recordKeyTest(actions, keyId, outcome, () => liveKeyIds.current.has(keyId));
   }
 
   const when = apiKey.lastValidatedAt ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(apiKey.lastValidatedAt) : t.keys.never;
@@ -190,6 +223,7 @@ function KeyCard({ apiKey }: { apiKey: UserApiKey }) {
         {test.status === "running" && <span className="text-muted-foreground">{t.keys.testing}</span>}
         {test.status === "ok" && <span className="text-success">{test.message}</span>}
         {test.status === "fail" && <span className="text-destructive">{t.keys.testFail}: {test.message}</span>}
+        {test.status === "idle" && apiKey.lastErrorMessage && <span className="text-destructive">{t.keys.testFail}: {errors[apiKey.lastErrorMessage] ?? errors.UNKNOWN}</span>}
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="lg" onClick={runTest} disabled={test.status === "running"}>{test.status === "running" ? <Loader2 className="animate-spin" /> : null}{t.keys.test}</Button>

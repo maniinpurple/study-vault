@@ -54,7 +54,7 @@ export function TagChips({ card }: { card: MistakeCard }) {
  * A quiet inline editor that saves itself: after a pause in typing, on blur and on unmount.
  * Mount it keyed by the record it edits; it does not follow later changes to `value`.
  */
-export function AutosaveField({ label, value, placeholder, onSave, rows = 2, mono = false }: { label: string; value: string; placeholder?: string; onSave: (value: string) => Promise<unknown>; rows?: number; mono?: boolean }) {
+export function AutosaveField({ label, value, placeholder, onSave, onChange, hint, rows = 2, mono = false }: { label: string; value: string; placeholder?: string; onSave: (value: string) => Promise<unknown>; /** Called with every keystroke, e.g. to drive a live preview. */ onChange?: (value: string) => void; hint?: string; rows?: number; mono?: boolean }) {
   const { t } = useVault();
   const id = React.useId();
   const [draft, setDraft] = React.useState(value);
@@ -101,6 +101,7 @@ export function AutosaveField({ label, value, placeholder, onSave, rows = 2, mon
         onChange={(e) => {
           setDraft(e.target.value);
           latest.current.draft = e.target.value;
+          onChange?.(e.target.value);
           setState("idle");
           if (timer.current !== null) window.clearTimeout(timer.current);
           timer.current = window.setTimeout(flush, SAVE_DELAY_MS);
@@ -111,6 +112,7 @@ export function AutosaveField({ label, value, placeholder, onSave, rows = 2, mon
           mono && "font-mono text-[13px]",
         )}
       />
+      {hint && <p className="text-caption text-subtle">{hint}</p>}
     </div>
   );
 }

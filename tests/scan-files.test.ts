@@ -11,7 +11,9 @@ describe("detectKind", () => {
     expect(detectKind({ name: "SCAN.PDF", type: "" })).toBe("PDF");
     expect(detectKind({ name: "IMG_1.HEIC", type: "" })).toBe("IMAGE");
     expect(detectKind({ name: "x", type: "image/webp" })).toBe("IMAGE");
-    expect(detectKind({ name: "notes.docx", type: "" })).toBeNull();
+    expect(detectKind({ name: "notes.docx", type: "" })).toBe("DOCX");
+    expect(detectKind({ name: "x", type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })).toBe("DOCX");
+    expect(detectKind({ name: "old.doc", type: "application/msword" })).toBeNull();
   });
 });
 

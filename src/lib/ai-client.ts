@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { memorySyncResponseSchema, tagSuggestResponseSchema, type MemorySyncRequest, type MemorySyncResponse, type TagSuggestRequest, type TagSuggestResponse } from "@/lib/brain-prompt";
 import type { Language } from "@/lib/constants";
+import { analyzeResponseSchema, classifyResponseSchema, type AnalyzeRequest, type AnalyzeResponse, type ClassifyRequest, type ClassifyResponse } from "@/lib/skills-prompt";
 import {
   fixResponseSchema, mutateResponseSchema, synthesizeResponseSchema, type FixRequest, type FixResponse, type MutateRequest, type MutateResponse, type SynthesizeRequest,
   type SynthesizeResponse,
@@ -53,3 +54,5 @@ export const requestMemorySync = (call: AiCall, input: MemorySyncRequest): Promi
 export const requestTagSuggestions = (call: AiCall, input: TagSuggestRequest): Promise<TagSuggestResponse> => postJob("/api/ai/tag-suggest", call, input, tagSuggestResponseSchema);
 export const requestSynthesis = (call: AiCall, input: SynthesizeRequest): Promise<SynthesizeResponse> => postJob("/api/ai/synthesize", call, input, synthesizeResponseSchema);
 export const requestSynthesisFix = (call: AiCall, input: FixRequest): Promise<FixResponse> => postJob("/api/ai/synthesize/fix", call, input, fixResponseSchema);
+export const requestClassify = (call: AiCall, input: ClassifyRequest): Promise<ClassifyResponse> => postJob("/api/ai/classify", call, input, classifyResponseSchema);
+export const requestAnalysis = (call: AiCall, input: AnalyzeRequest): Promise<AnalyzeResponse> => postJob("/api/ai/analyze", call, input, analyzeResponseSchema);

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { AiProviderError, assertSafeBaseUrl, buildProviderCall, runAiJson, runAiTask, type AiCredential } from "@/lib/ai-provider";
+import { AiProviderError, assertSafeBaseUrl, buildProviderCall, CONNECTION_TEST_TIMEOUT_MS, runAiJson, runAiTask, timeoutFor, type AiCredential } from "@/lib/ai-provider";
 import { encryptApiKey } from "@/lib/crypto";
 
 const USER = "user-1";
@@ -14,6 +14,11 @@ function credential(provider: AiCredential["provider"], extra: Partial<AiCredent
 }
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
+/** A fetch that never answers on its own and rejects like the real one when its request is aborted. */
+function hangingFetch() {
+  return vi.fn((_url: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))))) as unknown as typeof fetch;
+}
+
 beforeAll(() => {
   process.env.VAULT_ENCRYPTION_KEY = randomBytes(32).toString("base64");
 });
@@ -21,8 +26,12 @@ beforeAll(() => {
 describe("buildProviderCall", () => {
   const req = { system: "SYS", prompt: "PROMPT", json: true, images: [{ mimeType: "image/png", data: "AAAA" }] } as const;
   it("builds a Gemini request with the key in a header, never the URL", () => {
-    const call = buildProviderCall("GEMINI", SECRET, "gemini-2.5-flash", { ...req, images: [...req.images] });
-    expect(call.url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent");
+    const call = buildProviderCall("GEMINI", SECRET, "gemini-3.8-flash", { ...req, images: [...req.images] });
+    expect(call.url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent");
+    // The URL carries `models/` exactly once, whichever form the stored id has, and retired ids are replaced.
+    for (const stored of ["models/gemini-3.8-flash", "gemini-2.5-flash"]) {
+      expect(buildProviderCall("GEMINI", SECRET, stored, { ...req, images: [...req.images] }).url).toBe(call.url);
+    }
     expect(call.url).not.toContain(SECRET);
     expect(call.headers["x-goog-api-key"]).toBe(SECRET);
     expect(JSON.stringify(call.body)).toContain("responseMimeType");
@@ -124,5 +133,41 @@ describe("runAiJson", () => {
     await expect(runAiJson(cred(), { task: "synthesis", prompt: "p", language: "VI" }, schema, drift as unknown as typeof fetch)).rejects.toMatchObject({ code: "LANGUAGE_DRIFT" });
     const garbage = vi.fn().mockImplementation(async () => reply("not json"));
     await expect(runAiJson(cred(), { task: "synthesis", prompt: "p", language: "EN" }, schema, garbage as unknown as typeof fetch)).rejects.toMatchObject({ code: "INVALID_JSON" });
+  });
+});
+
+describe("request timeout", () => {
+  it("cuts a hanging Gemini connection test after 10 seconds and reports TIMEOUT, not a crash", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = hangingFetch();
+      const pending = runAiTask(credential("GEMINI", { defaultModel: "gemini-3.8-flash" }), { task: "connection_test", prompt: "ok", language: "EN" }, fetchMock).catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(CONNECTION_TEST_TIMEOUT_MS - 1);
+      expect(vi.getTimerCount()).toBe(1); // still waiting
+      await vi.advanceTimersByTimeAsync(2);
+      const err = await pending;
+      expect(err).toBeInstanceOf(AiProviderError);
+      expect(err).toMatchObject({ code: "TIMEOUT" });
+      expect(vi.getTimerCount()).toBe(0); // the timer is always cleared
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("keeps the connection test at 10 s and real tasks on their longer tier limits", () => {
+    expect(CONNECTION_TEST_TIMEOUT_MS).toBe(10_000);
+    expect(timeoutFor("connection_test", "LIGHT")).toBe(10_000);
+    expect(timeoutFor("ocr", "LIGHT")).toBeGreaterThan(10_000);
+    expect(timeoutFor("synthesis", "HEAVY")).toBeGreaterThan(timeoutFor("ocr", "LIGHT"));
+  });
+  it("still reports NETWORK for an ordinary connection failure, and clears its timer", async () => {
+    vi.useFakeTimers();
+    try {
+      const failing = vi.fn().mockRejectedValue(new TypeError("fetch failed")) as unknown as typeof fetch;
+      const err = await runAiTask(credential("OPENAI", { defaultModel: "gpt-4o-mini" }), { task: "ocr", prompt: "x", language: "EN" }, failing).catch((e: unknown) => e);
+      expect(err).toMatchObject({ code: "NETWORK" });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

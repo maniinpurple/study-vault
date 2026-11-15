@@ -4,6 +4,7 @@
  */
 import { SCAN_LIMITS, type FileKind } from "@/lib/constants";
 import { applyDocumentScan } from "@/lib/scan-filter";
+import { DocxError, renderDocxPages } from "@/lib/docx-source";
 import { planScanFiles, type ScanErrorCode } from "@/lib/scan-files";
 import { fitLongEdge, toPixelRect, type NormBox } from "@/lib/scan-geometry";
 import { stitchLayout } from "@/lib/stitch";
@@ -121,11 +122,26 @@ export async function openScanSource(files: File[], kind: FileKind): Promise<Sca
   return kind === "PDF" ? openPdf(files[0]) : openPhotos(files);
 }
 
-/** Validate + order the user's selection and open it. Throws `ScanSourceError` for any problem. */
-export async function openScanSelection(selection: readonly File[]): Promise<{ source: ScanSource; files: File[] }> {
+/**
+ * Validate + order the user's selection and open it. Throws `ScanSourceError` for any problem. A Word document is rendered
+ * to page images first, so `files` are those pages (stored as an IMAGE source) and `name` is the document's own name.
+ */
+export async function openScanSelection(selection: readonly File[]): Promise<{ source: ScanSource; files: File[]; name: string }> {
   const plan = planScanFiles(selection);
   if (!plan.ok) throw new ScanSourceError(plan.code);
-  return { source: await openScanSource(plan.files, plan.kind), files: plan.files };
+  if (plan.kind === "DOCX") {
+    const original = plan.files[0];
+    let pages: HTMLCanvasElement[];
+    try {
+      pages = await renderDocxPages(original);
+    } catch (err) {
+      throw new ScanSourceError(err instanceof DocxError ? err.code : "UNREADABLE");
+    }
+    const base = original.name.replace(/\.docx$/i, "");
+    const files = await Promise.all(pages.map(async (canvas, i) => new File([await canvasToBlob(canvas, "image/jpeg", 0.9)], `${base}-p${i + 1}.jpg`, { type: "image/jpeg" })));
+    return { source: await openScanSource(files, "IMAGE"), files, name: original.name };
+  }
+  return { source: await openScanSource(plan.files, plan.kind), files: plan.files, name: plan.files[0].name };
 }
 
 /** Grayscale/shadow-flattened copy of `canvas` ("High-Contrast Document Scan"). The input is left untouched. */

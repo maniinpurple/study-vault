@@ -121,8 +121,8 @@ export const AI_PROVIDER_META: Record<AiProvider, AiProviderMeta> = {
     label: "Google Gemini",
     requiresBaseUrl: false,
     models: [
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", tier: "LIGHT", vision: true },
-      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", tier: "HEAVY", vision: true },
+      { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", tier: "LIGHT", vision: true },
+      { id: "gemini-3.8-pro", label: "Gemini 3.8 Pro", tier: "HEAVY", vision: true },
     ],
   },
   OPENAI: {
@@ -147,6 +147,21 @@ export const AI_PROVIDER_META: Record<AiProvider, AiProviderMeta> = {
     models: [],
   },
 };
+
+/**
+ * Model ids that providers have retired → their current replacement. Keys saved before a retirement still carry the old id
+ * in the database; `normalizeModelId` maps it at use time so those keys keep working without anyone re-saving them.
+ */
+const RETIRED_MODELS: Readonly<Record<string, string>> = {
+  "gemini-2.5-flash": "gemini-3.8-flash",
+  "gemini-2.5-pro": "gemini-3.8-pro",
+};
+
+/** The id to send to a provider: retired ids replaced, and Google's `models/` resource prefix removed (the request URL adds it). */
+export function normalizeModelId(model: string): string {
+  const bare = model.trim().replace(/^models\//, "");
+  return RETIRED_MODELS[bare] ?? bare;
+}
 
 /**
  * Subject / tag swatches (stored on Subject.color and AdaptiveTag.color): one perceptually even ramp

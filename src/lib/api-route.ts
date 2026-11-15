@@ -36,7 +36,7 @@ export async function resolveCredential(keyId: string): Promise<{ ok: true; cred
 /** Map known failures to safe JSON; anything unexpected becomes a generic 500 (never echo internals). */
 export function errorResponse(err: unknown): Response {
   if (err instanceof AiProviderError) {
-    const status = err.code === "PROVIDER_HTTP" ? 502 : err.code === "NETWORK" ? 504 : err.code === "BAD_KEY" || err.code === "BAD_BASE_URL" || err.code === "NO_MODEL" ? 422 : 502;
+    const status = err.code === "PROVIDER_HTTP" ? 502 : err.code === "NETWORK" || err.code === "TIMEOUT" ? 504 : err.code === "BAD_KEY" || err.code === "BAD_BASE_URL" || err.code === "NO_MODEL" ? 422 : 502;
     return Response.json({ error: err.code, message: err.message, providerStatus: err.status }, { status });
   }
   if (err instanceof VaultError) return Response.json({ error: "VAULT", message: "Vault error" }, { status: 500 });

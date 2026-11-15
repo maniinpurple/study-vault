@@ -4,8 +4,8 @@ import { Flag, Loader2, Trash2 } from "lucide-react";
 import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
-import { MathText } from "@/components/math-text";
-import { ProblemFields } from "@/components/problems/problem-fields";
+import { MarkdownMath } from "@/components/markdown-math";
+import { AutosaveField, ProblemFields } from "@/components/problems/problem-fields";
 import { StoredImage } from "@/components/stored-image";
 import { Button } from "@/components/ui/button";
 import { aiLanguageFor, pickAiKey } from "@/lib/ai-keys";
@@ -29,6 +29,8 @@ interface Props {
 export function SnipCard({ card, number, selected, landing, onSelect, onDelete }: Props) {
   const { snapshot, user, t, actions } = useVault();
   const [showImage, setShowImage] = React.useState(false);
+  /** What is being typed in the editor, so the preview follows every keystroke (the card itself updates after a pause). */
+  const [draftText, setDraftText] = React.useState<string | null>(null);
   const [converting, setConverting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const subject = snapshot.subjects.find((s) => s.id === card.subjectId) ?? null;
@@ -81,7 +83,7 @@ export function SnipCard({ card, number, selected, landing, onSelect, onDelete }
 
       <div className="border-y border-border bg-white">
         {hasText && !showImage ? (
-          <MathText text={card.questionLatex} className="bg-card p-3 text-reading" />
+          <MarkdownMath text={draftText ?? card.questionLatex} className="bg-card p-3" />
         ) : (
           <StoredImage data-snip-image={card.id} path={card.originalCropPath} alt={t.problem.imageAlt} className={cn("mx-auto block max-h-80 w-auto max-w-full", landing && "opacity-0")} />
         )}
@@ -107,6 +109,18 @@ export function SnipCard({ card, number, selected, landing, onSelect, onDelete }
           <p role="alert" className="text-caption text-destructive">
             {error}
           </p>
+        )}
+        {hasText && (
+          <AutosaveField
+            key={`${card.id}:text`}
+            label={t.problem.editText}
+            hint={t.problem.editTextHint}
+            value={card.questionLatex}
+            rows={4}
+            mono
+            onChange={setDraftText}
+            onSave={(text) => actions.updateCard(card.id, { questionLatex: text })}
+          />
         )}
         <ProblemFields card={card} />
       </div>

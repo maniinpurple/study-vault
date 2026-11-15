@@ -5,9 +5,9 @@ import { AI_PROVIDER_META, AI_PROVIDERS, slugify } from "@/lib/constants";
 
 describe("selectModel", () => {
   it("routes light tasks to the light model even when the user picked a heavy default", () => {
-    const key = { provider: "GEMINI", defaultModel: "gemini-2.5-pro", visionModel: null } as const;
-    expect(selectModel("tag_suggestion", key)).toBe("gemini-2.5-flash");
-    expect(selectModel("memory_sync", key)).toBe("gemini-2.5-flash");
+    const key = { provider: "GEMINI", defaultModel: "gemini-3.8-pro", visionModel: null } as const;
+    expect(selectModel("tag_suggestion", key)).toBe("gemini-3.8-flash");
+    expect(selectModel("memory_sync", key)).toBe("gemini-3.8-flash");
   });
   it("keeps the user's heavy model for synthesis and the light model they chose for light tasks", () => {
     expect(selectModel("synthesis", { provider: "OPENAI", defaultModel: "gpt-4o", visionModel: null })).toBe("gpt-4o");
@@ -21,6 +21,12 @@ describe("selectModel", () => {
     expect(selectModel("synthesis", { provider: "CUSTOM", defaultModel: "llama-3.3-70b", visionModel: null })).toBe("llama-3.3-70b");
     expect(selectModel("tag_suggestion", { provider: "CUSTOM", defaultModel: "llama-3.3-70b", visionModel: null })).toBe("llama-3.3-70b");
     expect(() => selectModel("synthesis", { provider: "CUSTOM", defaultModel: null, visionModel: null })).toThrow();
+  });
+  it("maps retired Gemini ids saved in older keys to their replacements, and never sends a models/ prefix", () => {
+    const old = { provider: "GEMINI", defaultModel: "gemini-2.5-pro", visionModel: "gemini-2.5-flash" } as const;
+    expect(selectModel("synthesis", old)).toBe("gemini-3.8-pro");
+    expect(selectModel("ocr", old)).toBe("gemini-3.8-flash");
+    expect(selectModel("ocr", { provider: "GEMINI", defaultModel: "models/gemini-3.8-flash", visionModel: null })).toBe("gemini-3.8-flash");
   });
   it("only synthesis is a heavy task", () => {
     expect(Object.entries(TASK_TIER).filter(([, tier]) => tier === "HEAVY").map(([task]) => task)).toEqual(["synthesis"]);

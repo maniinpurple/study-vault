@@ -13,6 +13,7 @@ import { CrosshairCard } from "@/components/crosshair-card";
 import { ExperimentalBadge } from "@/components/experimental-badge";
 import { ImageLightbox } from "@/components/image-lightbox";
 import { MathText } from "@/components/math-text";
+import { ProblemAnalysis } from "@/components/review/problem-analysis";
 import { AttemptLog, RATING_DOT } from "@/components/review/attempt-log";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -441,6 +442,8 @@ function ReviewCard({ card, subject, onPin, onGraded }: CardProps) {
               </section>
             )}
           </CrosshairCard>
+
+          <ProblemAnalysis card={card} subject={subject} />
 
           <CrosshairCard className="space-y-3 p-5">
             <h3 className="text-xs font-semibold">{t.review.history}</h3>

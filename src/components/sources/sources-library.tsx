@@ -3,77 +3,76 @@
 import { motion } from "framer-motion";
 import { FileText, Loader2, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
 import { Modal } from "@/components/modal";
 import { StoredImage } from "@/components/stored-image";
+import { LoadMore, useVisibleCount } from "@/components/load-more";
+import { UploadDialog, type UploadDraft } from "@/components/sources/upload-dialog";
 import { SubjectDialog } from "@/components/subject-dialog";
 import { Button } from "@/components/ui/button";
 import { useStoredChoice } from "@/components/use-stored-choice";
 import { ViewToggle } from "@/components/view-toggle";
-import { SCAN_LIMITS, STORAGE_KEYS, swatchColor } from "@/lib/constants";
+import { STORAGE_KEYS, swatchColor } from "@/lib/constants";
 import { format } from "@/lib/i18n";
 import { spring, staggerDelay } from "@/lib/motion";
 import { uploadThumbnailPath } from "@/lib/problems";
 import type { ExamUpload } from "@/lib/repo/types";
-import { canvasToBlob, fingerprintFiles, openScanSelection, ScanSourceError } from "@/lib/scan-source";
+import { openScanSelection, ScanSourceError } from "@/lib/scan-source";
 import { cn } from "@/lib/utils";
 import { VIEW_MODES, type ViewMode } from "@/lib/view-mode";
+import { SOURCES_PAGE_SIZE } from "@/lib/vault";
 
-const ACCEPT = "application/pdf,image/png,image/jpeg,image/webp,image/heic,image/heif,.pdf";
-const stripExtension = (name: string) => name.replace(/\.(pdf|png|jpe?g|webp|heic|heif)$/i, "");
+const ACCEPT = "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/webp,image/heic,image/heif,.pdf,.docx";
 
 export function SourcesLibrary() {
   const { snapshot, t, locale, user, activeSubjectId, actions } = useVault();
-  const router = useRouter();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(false);
   const [over, setOver] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [creatingSubject, setCreatingSubject] = React.useState(false);
   const [deleting, setDeleting] = React.useState<ExamUpload | null>(null);
+  const [draft, setDraft] = React.useState<UploadDraft | null>(null);
+  const draftRef = React.useRef<UploadDraft | null>(null);
+  React.useEffect(() => {
+    draftRef.current = draft;
+  });
+  // Leaving the page with a dialog open must still release the opened PDF.
+  React.useEffect(() => () => draftRef.current?.source.destroy(), []);
   const [view, setView] = useStoredChoice<ViewMode>(STORAGE_KEYS.sourcesView, VIEW_MODES, "box");
 
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const scope = subjects.find((s) => s.id === activeSubjectId) ?? null;
   const sources = snapshot.examUploads.filter((u) => !scope || u.subjectId === scope.id);
+  const pageSize = SOURCES_PAGE_SIZE[view];
+  const [shown, showMore] = useVisibleCount(`${scope?.id ?? ""}|${view}`, pageSize);
+  const visibleSources = sources.slice(0, shown);
   const snipCount = (id: string) => snapshot.cards.filter((c) => c.examUploadId === id && c.archivedAt === null).length;
   const dateFmt = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: user.timezone });
 
-  async function upload(selection: File[]) {
+  /** Validate and open the selection, then ask the student to confirm its details in the upload dialog. */
+  async function prepare(selection: File[]) {
     if (busy || selection.length === 0) return;
-    const subjectId = scope?.id ?? subjects[0]?.id;
-    if (!subjectId) {
+    if (subjects.length === 0) {
       setError(t.sources.needSubject);
       return setCreatingSubject(true);
     }
     setBusy(true);
     setError(null);
     try {
-      const { source, files } = await openScanSelection(selection);
-      try {
-        const thumbnail = await canvasToBlob(await source.renderPage(1, SCAN_LIMITS.thumbnailLongEdge), "image/jpeg", 0.8).catch(() => null);
-        const created = await actions.createSource({
-          title: stripExtension(files[0].name),
-          subjectId,
-          fileKind: source.kind,
-          mimeType: files[0].type || (source.kind === "PDF" ? "application/pdf" : "image/jpeg"),
-          fileSizeBytes: files.reduce((sum, f) => sum + f.size, 0),
-          pageCount: source.pageCount,
-          sha256: await fingerprintFiles(files),
-          files,
-          thumbnail,
-        });
-        router.push(`/sources/${created.id}`);
-      } finally {
-        source.destroy();
-      }
+      setDraft(await openScanSelection(selection));
     } catch (err) {
       setError(err instanceof ScanSourceError ? t.sources.errors[err.code] : t.common.errorGeneric);
+    } finally {
       setBusy(false);
     }
+  }
+
+  function closeDraft() {
+    draftRef.current?.source.destroy();
+    setDraft(null);
   }
 
   return (
@@ -87,7 +86,7 @@ export function SourcesLibrary() {
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
-        void upload(Array.from(e.dataTransfer.files));
+        void prepare(Array.from(e.dataTransfer.files));
       }}
     >
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -110,7 +109,7 @@ export function SourcesLibrary() {
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
             e.target.value = "";
-            void upload(files);
+            void prepare(files);
           }}
         />
       </header>
@@ -150,7 +149,7 @@ export function SourcesLibrary() {
               </div>
             )}
             <ul className={cn(view === "box" && "grid gap-5 sm:grid-cols-2 xl:grid-cols-3", view === "grid" && "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6", view === "list" && "divide-y divide-border")}>
-              {sources.map((source, i) => {
+              {visibleSources.map((source, i) => {
                 const subject = subjects.find((s) => s.id === source.subjectId);
                 const count = snipCount(source.id);
                 const item = { source, subjectName: subject?.name ?? null, subjectColor: subject?.color ?? null, snipLabel: count > 0 ? format(t.sources.snips, { n: count }) : t.sources.noSnips, hasSnips: count > 0, pagesLabel: format(t.sources.pages, { n: source.pageCount ?? 1 }), dateLabel: dateFmt.format(source.createdAt) };
@@ -172,9 +171,11 @@ export function SourcesLibrary() {
               })}
             </ul>
           </div>
+          <LoadMore remaining={sources.length - visibleSources.length} step={pageSize} onMore={showMore} />
         </div>
       )}
 
+      <UploadDialog draft={draft} defaultSubjectId={scope?.id ?? null} onClose={closeDraft} />
       <SubjectDialog open={creatingSubject} onClose={() => setCreatingSubject(false)} />
       <Modal open={deleting !== null} onClose={() => setDeleting(null)} title={t.sources.deleteTitle} description={t.sources.deleteBody}>
         <div className="flex justify-end gap-2">
@@ -213,6 +214,7 @@ const LIST_COLUMNS = "grid-cols-[minmax(0,1fr)] md:grid-cols-[minmax(0,2.4fr)_mi
 function Thumbnail({ source, className, iconClass }: { source: ExamUpload; className: string; iconClass: string }) {
   return (
     <StoredImage
+      fill
       path={uploadThumbnailPath(source)}
       alt=""
       className={className}
@@ -233,7 +235,7 @@ function SubjectDot({ color }: { color: string | null }) {
 function SourceCard({ source, subjectName, subjectColor, pagesLabel, snipLabel, hasSnips, dateLabel, compact }: ItemProps & { compact: boolean }) {
   return (
     <Link href={`/sources/${source.id}`} className="block overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-px hover:shadow-md">
-      <div className={cn("overflow-hidden border-b border-border bg-sunken", compact ? "aspect-[3/4]" : "aspect-[4/3]")}>
+      <div className={cn("relative overflow-hidden border-b border-border bg-sunken", compact ? "aspect-[3/4]" : "aspect-[4/3]")}>
         <Thumbnail source={source} className="size-full object-cover object-top" iconClass={compact ? "size-5" : "size-7"} />
       </div>
       <div className={cn("space-y-1", compact ? "p-2.5" : "p-3.5")}>
@@ -258,7 +260,7 @@ function SourceRow({ source, subjectName, subjectColor, pagesLabel, snipLabel, h
   return (
     <Link href={`/sources/${source.id}`} className={cn("grid items-center gap-x-4 gap-y-1 py-2.5 pr-14 pl-4 transition-colors hover:bg-muted", LIST_COLUMNS)}>
       <span className="flex min-w-0 items-center gap-3">
-        <span className="h-12 w-9 shrink-0 overflow-hidden rounded border border-border bg-sunken">
+        <span className="relative h-12 w-9 shrink-0 overflow-hidden rounded border border-border bg-sunken">
           <Thumbnail source={source} className="size-full object-cover object-top" iconClass="size-4" />
         </span>
         <span className="min-w-0">

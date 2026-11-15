@@ -12,6 +12,9 @@ import {
 import type { Language } from "@/lib/constants";
 import { normalizeOcrMarkdown } from "@/lib/ocr-prompt";
 import {
+  analyzeOutputSchema, buildAnalyzePrompt, buildClassifyPrompt, classifyOutputSchema, type AnalyzeRequest, type AnalyzeResponse, type ClassifyRequest, type ClassifyResponse,
+} from "@/lib/skills-prompt";
+import {
   buildFixPrompt, buildMutatePrompt, buildSynthesizePrompt, fixOutputSchema, formatVerification, mutateOutputSchema, mutationProblem, synthesisProblem,
   synthesizeOutputSchema, type FixRequest, type FixResponse, type MutateRequest, type MutateResponse, type SynthesizeRequest, type SynthesizeResponse,
 } from "@/lib/synth-prompt";
@@ -98,4 +101,24 @@ export async function runSynthesisFix(credential: AiCredential, language: Langua
     verificationLatex: tidy(formatVerification(data.verification)),
     model: result.model,
   };
+}
+
+/** Upload dialog: the first page → the document's own title and its subject. Both are copied from the page, so no language check. */
+export async function runClassify(credential: AiCredential, language: Language, input: ClassifyRequest, fetchImpl?: typeof fetch): Promise<ClassifyResponse> {
+  const { system, prompt } = buildClassifyPrompt(input);
+  const result = await runAiJson(credential, { task: "classify", system, prompt, language, images: [input.image], verbatim: true, maxOutputTokens: 400 }, classifyOutputSchema, fetchImpl, { languageText: () => "" });
+  return { title: result.data.title, subject: result.data.subject, model: result.model };
+}
+
+/** Review: the problem's sub-topic, type and core formula, in the student's AI output language. */
+export async function runAnalyze(credential: AiCredential, language: Language, input: AnalyzeRequest, fetchImpl?: typeof fetch): Promise<AnalyzeResponse> {
+  const { system, prompt } = buildAnalyzePrompt(input);
+  const result = await runAiJson(
+    credential,
+    { task: "analysis", system, prompt, language, images: input.image ? [input.image] : undefined, maxOutputTokens: 700 },
+    analyzeOutputSchema,
+    fetchImpl,
+    { languageText: (d) => `${d.type} ${d.core_concept}` },
+  );
+  return { type: tidy(result.data.type), core_concept: tidy(result.data.core_concept), model: result.model };
 }

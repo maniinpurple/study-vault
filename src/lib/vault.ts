@@ -95,3 +95,23 @@ export function groupProblems(cards: readonly MistakeCard[], group: VaultGroup, 
   const fixed: readonly (string | null)[] = group === "time" ? TIME_BUCKETS : group === "status" ? REVIEW_STATUSES : [...order, ...[...buckets.keys()].filter((k) => k !== null && !order.includes(k)), null];
   return fixed.filter((key) => buckets.has(key)).map((key) => ({ key, cards: buckets.get(key)! }));
 }
+
+/** How many problems each view shows at first, and adds per "show more" (denser views fit more). */
+export const VAULT_PAGE_SIZE = { grid: 48, list: 60, box: 24 } as const;
+/** The same for the Sources library. */
+export const SOURCES_PAGE_SIZE = { grid: 36, list: 50, box: 18 } as const;
+
+/** The first `limit` cards across the sections (in order), dropping sections that end up empty. `remaining` is how many were cut. */
+export function takeSections(sections: readonly ProblemGroup[], limit: number): { sections: ProblemGroup[]; remaining: number } {
+  let left = Math.max(0, limit);
+  const out: ProblemGroup[] = [];
+  let total = 0;
+  for (const section of sections) {
+    total += section.cards.length;
+    if (left <= 0) continue;
+    const cards = section.cards.slice(0, left);
+    left -= cards.length;
+    out.push({ key: section.key, cards });
+  }
+  return { sections: out, remaining: total - out.reduce((n, s) => n + s.cards.length, 0) };
+}

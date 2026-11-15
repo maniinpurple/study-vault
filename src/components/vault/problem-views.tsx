@@ -50,13 +50,13 @@ export function ProblemTile({ card, status, onEdit }: ViewProps) {
         <span className="min-w-0 flex-1 truncate">{topic?.name ?? subject?.name}</span>
         {card.isHighYield && <span className="shrink-0 rounded-full bg-mark-soft px-1.5 py-0.5 font-medium text-mark-foreground">{t.problem.priority}</span>}
       </span>
-      <span className="block h-32 overflow-hidden border-y border-border bg-white">
+      <span className="relative block h-32 overflow-hidden border-y border-border bg-white">
         {hasText ? (
           <span className="block h-full bg-card p-3">
             <MathText text={card.questionLatex} className="line-clamp-6 text-[13px] leading-[1.45]" />
           </span>
         ) : (
-          <StoredImage path={card.originalCropPath} alt={t.problem.imageAlt} className="size-full object-cover object-top" />
+          <StoredImage fill path={card.originalCropPath} alt={t.problem.imageAlt} className="object-cover object-top" />
         )}
       </span>
       <span className="flex items-center gap-2 px-3 py-2 text-caption text-muted-foreground">
@@ -94,8 +94,8 @@ export function ProblemRow({ card, status, onEdit }: ViewProps) {
         {hasText ? (
           <MathText text={card.questionLatex} className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-[1.45]" />
         ) : (
-          <span className="h-10 w-16 shrink-0 overflow-hidden rounded border border-border bg-white">
-            <StoredImage path={card.originalCropPath} alt={t.problem.imageAlt} className="size-full object-cover object-top" />
+          <span className="relative h-10 w-16 shrink-0 overflow-hidden rounded border border-border bg-white">
+            <StoredImage fill path={card.originalCropPath} alt={t.problem.imageAlt} className="object-cover object-top" />
           </span>
         )}
         {card.isHighYield && <Flag className="size-3.5 shrink-0 text-mark-foreground" aria-label={t.problem.priority} />}
