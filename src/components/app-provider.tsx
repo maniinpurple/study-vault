@@ -11,6 +11,8 @@ import type {
   NewSubject, NewSynthesizedProblem, NewTagSuggestion, PersonaPatch, ReviewInput, Subject, SubjectMemoryInput, SubjectPatch, SynthesizedProblemPatch, TagSuggestionFeedback, Topic,
   UploadPatch, UserApiKey, UserSnapshot,
 } from "@/lib/repo/types";
+import { patchCard, patchUser, removeCard, setCardTagLinks } from "@/lib/optimistic";
+import { shareStructure } from "@/lib/snapshot-share";
 import * as server from "@/server/actions";
 import type { ActionResult } from "@/server/result";
 
@@ -69,6 +71,12 @@ interface AppState {
 }
 
 const AppContext = React.createContext<AppState | null>(null);
+/**
+ * The two parts of the app state that almost never change, as their own contexts: components that only need the actions or the
+ * dictionary subscribe to these and are not re-rendered by every snapshot update (which replaces the main context's value).
+ */
+const ActionsContext = React.createContext<Actions | null>(null);
+const I18nContext = React.createContext<{ t: Dictionary; locale: string } | null>(null);
 
 function readStorage(key: string): string | null {
   try {
@@ -106,32 +114,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loadedAt, setLoadedAt] = React.useState(() => new Date(0));
   const [activeSubjectId, setActiveSubjectIdState] = React.useState<string | null>(null);
   const userIdRef = React.useRef<string | null>(null);
+  /** The latest snapshot, readable synchronously: optimistic edits and rollbacks are computed from it. */
+  const snapshotRef = React.useRef<UserSnapshot | null>(null);
+  /** Data actions currently waiting for the server. Only the last response is applied (see `call`). */
+  const inflight = React.useRef(0);
   const router = useRouter();
   /** Session gone (expired, or the account was removed): back to the sign-in page. */
   const toLogin = React.useCallback(() => router.replace("/login"), [router]);
 
-  const apply = React.useCallback((snap: UserSnapshot) => {
+  /** Show `next` now (an optimistic edit, a rollback, or the server's snapshot). */
+  const commit = React.useCallback((next: UserSnapshot) => {
+    if (snapshotRef.current === next) return;
+    snapshotRef.current = next;
+    setSnapshot(next);
+  }, []);
+
+  const apply = React.useCallback((incoming: UserSnapshot) => {
+    // The server sends a complete, freshly deserialized snapshot: re-use every object that did not change, so memoized
+    // components keep their identity and skip the render.
+    const snap = shareStructure(snapshotRef.current, incoming);
+    const changed = snap !== snapshotRef.current;
     userIdRef.current = snap.user.id;
-    setSnapshot(snap);
-    setLoadedAt(new Date());
+    commit(snap);
+    // `loadedAt` anchors "due today": refresh it when data changed, or when it has gone stale.
+    setLoadedAt((previous) => (changed || Date.now() - previous.getTime() > 60_000 ? new Date() : previous));
     setActiveSubjectIdState((current) => {
       const stored = current ?? readStorage(`${STORAGE_KEYS.activeSubject}:${snap.user.id}`);
       return snap.subjects.some((s) => s.id === stored && s.archivedAt === null) ? stored : null;
     });
-  }, []);
+  }, [commit]);
 
-  /** Await a data action: apply the snapshot it returns, hand back its result, turn a failure into an `ActionError`. */
+  /**
+   * Await a data action: hand back its result and turn a failure into an `ActionError`.
+   *
+   * With `optimistic`, the UI changes right now instead of after the server round trip (which also reloads the whole snapshot);
+   * if the action then fails, the previous snapshot is put back and the server's version is fetched.
+   * Server actions run one after another, so a response that arrives while others are still waiting describes a state the UI has
+   * already moved past: only the last response is applied, and it already contains everything before it.
+   */
   const call = React.useCallback(
-    async <T,>(pending: Promise<ActionResult<T>>): Promise<T> => {
-      const result = await pending;
+    async <T,>(pending: Promise<ActionResult<T>>, optimistic?: { before: UserSnapshot | null }): Promise<T> => {
+      inflight.current += 1;
+      let result: ActionResult<T>;
+      try {
+        result = await pending;
+      } finally {
+        inflight.current -= 1;
+      }
       if (!result.ok) {
+        if (optimistic?.before) {
+          commit(optimistic.before);
+          void server.loadSnapshotAction().then((fresh) => fresh.ok && apply(fresh.snapshot));
+        }
         if (result.code === "UNAUTHENTICATED") toLogin();
         throw new ActionError(result.code);
       }
-      apply(result.snapshot);
+      if (inflight.current === 0) apply(result.snapshot);
       return result.data;
     },
-    [apply, toLogin],
+    [apply, commit, toLogin],
+  );
+
+  /** Run a data action, optionally after showing its expected effect (`edit`) immediately. */
+  const act = React.useCallback(
+    <T,>(start: () => Promise<ActionResult<T>>, edit?: (snapshot: UserSnapshot) => UserSnapshot): Promise<T> => {
+      const before = snapshotRef.current;
+      if (edit && before) commit(edit(before));
+      return call(start(), edit ? { before } : undefined);
+    },
+    [call, commit],
   );
 
   React.useEffect(() => {
@@ -174,13 +225,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     return {
       async setTheme(next) {
-        await call(server.updateProfileAction({ theme: next }));
+        await act(() => server.updateProfileAction({ theme: next }), (s) => patchUser(s, { theme: next }));
       },
       async setUiLanguage(next) {
-        await call(server.updateProfileAction({ uiLanguage: next }));
+        await act(() => server.updateProfileAction({ uiLanguage: next }), (s) => patchUser(s, { uiLanguage: next }));
       },
       async setDefaultAiLanguage(next) {
-        await call(server.updateProfileAction({ defaultAiOutputLanguage: next }));
+        await act(() => server.updateProfileAction({ defaultAiOutputLanguage: next }), (s) => patchUser(s, { defaultAiOutputLanguage: next }));
       },
       setActiveSubject(id) {
         setActiveSubjectIdState(id);
@@ -247,7 +298,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return call(server.createProblemAction(body));
       },
       async deleteProblem(id) {
-        await call(server.deleteProblemAction(id));
+        await act(() => server.deleteProblemAction(id), (s) => removeCard(s, id));
       },
       async getBlob(path) {
         try {
@@ -260,10 +311,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       reviewCard: (input) => call(server.reviewCardAction(input)),
       async updateCard(id, patch) {
-        await call(server.updateCardAction(id, patch));
+        await act(() => server.updateCardAction(id, patch), (s) => patchCard(s, id, patch));
       },
       async setCardTags(cardId, tagIds) {
-        await call(server.setCardTagsAction(cardId, tagIds));
+        await act(() => server.setCardTagsAction(cardId, tagIds), (s) => setCardTagLinks(s, cardId, tagIds));
       },
       async saveSubjectMemory(subjectId, input) {
         await call(server.saveSubjectMemoryAction(subjectId, input));
@@ -290,14 +341,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await call(server.deleteSynthesizedProblemAction(id));
       },
     };
-  }, [apply, call, toLogin]);
+  }, [act, apply, call, toLogin]);
 
+  const i18nValue = React.useMemo(() => ({ t: getDictionary(uiLanguage), locale: LOCALE_TAG[uiLanguage] }), [uiLanguage]);
   const value = React.useMemo<AppState>(
-    () => ({ status, snapshot, loadedAt, activeSubjectId, t: getDictionary(uiLanguage), locale: LOCALE_TAG[uiLanguage], actions }),
-    [status, snapshot, loadedAt, activeSubjectId, uiLanguage, actions],
+    () => ({ status, snapshot, loadedAt, activeSubjectId, t: i18nValue.t, locale: i18nValue.locale, actions }),
+    [status, snapshot, loadedAt, activeSubjectId, i18nValue, actions],
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <ActionsContext.Provider value={actions}>
+      <I18nContext.Provider value={i18nValue}>
+        <AppContext.Provider value={value}>{children}</AppContext.Provider>
+      </I18nContext.Provider>
+    </ActionsContext.Provider>
+  );
+}
+
+/** The data actions only. Stable for the life of the provider, so using it never causes a re-render. */
+export function useActions(): Actions {
+  const ctx = React.useContext(ActionsContext);
+  if (!ctx) throw new Error("useActions must be used inside <AppProvider>");
+  return ctx;
+}
+
+/** The dictionary and locale only: changes with the interface language, not with the user's data. */
+export function useI18n(): { t: Dictionary; locale: string } {
+  const ctx = React.useContext(I18nContext);
+  if (!ctx) throw new Error("useI18n must be used inside <AppProvider>");
+  return ctx;
 }
 
 export function useApp(): AppState {

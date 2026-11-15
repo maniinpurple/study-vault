@@ -26,7 +26,7 @@ function Prose({ text }: { text: string }) {
  * Renders "Markdown + LaTeX" card content: `$…$` / `$$…$$` through KaTeX, light inline Markdown, everything else as
  * plain text (never raw HTML — model output is untrusted).
  */
-export function MathText({ text, className }: { text: string; className?: string }) {
+function MathTextView({ text, className }: { text: string; className?: string }) {
   const tokens = React.useMemo(() => tokenizeMath(text), [text]);
   return (
     <div className={cn("text-sm leading-relaxed break-words whitespace-pre-wrap", className)}>
@@ -48,3 +48,6 @@ export function MathText({ text, className }: { text: string; className?: string
     </div>
   );
 }
+
+/** Memoized: KaTeX typesetting is expensive, and the text rarely changes between renders. */
+export const MathText = React.memo(MathTextView);

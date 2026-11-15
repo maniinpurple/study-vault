@@ -3,7 +3,7 @@
 import { Check } from "lucide-react";
 import * as React from "react";
 
-import { useVault } from "@/components/app-provider";
+import { useActions, useI18n, useVault } from "@/components/app-provider";
 import { swatchColor } from "@/lib/constants";
 import type { MistakeCard } from "@/lib/repo/types";
 import { tagDisplayName, tagsForSubject } from "@/lib/tags";
@@ -54,8 +54,10 @@ export function TagChips({ card }: { card: MistakeCard }) {
  * A quiet inline editor that saves itself: after a pause in typing, on blur and on unmount.
  * Mount it keyed by the record it edits; it does not follow later changes to `value`.
  */
-export function AutosaveField({ label, value, placeholder, onSave, onChange, hint, rows = 2, mono = false }: { label: string; value: string; placeholder?: string; onSave: (value: string) => Promise<unknown>; /** Called with every keystroke, e.g. to drive a live preview. */ onChange?: (value: string) => void; hint?: string; rows?: number; mono?: boolean }) {
-  const { t } = useVault();
+export const AutosaveField = React.memo(AutosaveFieldView);
+
+function AutosaveFieldView({ label, value, placeholder, onSave, onChange, hint, rows = 2, mono = false }: { label: string; value: string; placeholder?: string; onSave: (value: string) => Promise<unknown>; /** Called with every keystroke, e.g. to drive a live preview. */ onChange?: (value: string) => void; hint?: string; rows?: number; mono?: boolean }) {
+  const { t } = useI18n();
   const id = React.useId();
   const [draft, setDraft] = React.useState(value);
   const [state, setState] = React.useState<"idle" | "saving" | "saved">("idle");
@@ -118,8 +120,9 @@ export function AutosaveField({ label, value, placeholder, onSave, onChange, hin
 }
 
 /** Tags, solution and takeaway of a problem, kept together and saved in place. */
-export function ProblemFields({ card }: { card: MistakeCard }) {
-  const { t, actions } = useVault();
+export const ProblemFields = React.memo(function ProblemFields({ card }: { card: MistakeCard }) {
+  const { t } = useI18n();
+  const actions = useActions();
   return (
     <div className="space-y-3">
       <TagChips card={card} />
@@ -127,4 +130,4 @@ export function ProblemFields({ card }: { card: MistakeCard }) {
       <AutosaveField label={t.problem.takeaway} value={card.ahaNote ?? ""} placeholder={t.problem.takeawayPlaceholder} onSave={(text) => actions.updateCard(card.id, { ahaNote: text })} />
     </div>
   );
-}
+});

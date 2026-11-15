@@ -3,15 +3,15 @@
 import { Flag, Loader2, Trash2 } from "lucide-react";
 import * as React from "react";
 
-import { useVault } from "@/components/app-provider";
+import { useActions, useI18n } from "@/components/app-provider";
 import { MarkdownMath } from "@/components/markdown-math";
 import { AutosaveField, ProblemFields } from "@/components/problems/problem-fields";
 import { StoredImage } from "@/components/stored-image";
 import { Button } from "@/components/ui/button";
-import { aiLanguageFor, pickAiKey } from "@/lib/ai-keys";
+import { aiLanguageFor } from "@/lib/ai-keys";
 import { format } from "@/lib/i18n";
 import { OcrRequestError, requestOcr } from "@/lib/ocr-client";
-import type { MistakeCard } from "@/lib/repo/types";
+import type { MistakeCard, Subject, User, UserApiKey } from "@/lib/repo/types";
 import { blobToBase64 } from "@/lib/scan-source";
 import { cn } from "@/lib/utils";
 
@@ -21,20 +21,29 @@ interface Props {
   selected: boolean;
   /** The crop is still flying in from the page: keep its slot but hide the image. */
   landing: boolean;
-  onSelect(): void;
-  onDelete(): void;
+  /** The card's own subject, the API key the AI skills would use for it, and the account: passed in, not read from the app
+   *  state, so this card is not re-rendered by changes elsewhere in the snapshot. */
+  subject: Subject | null;
+  aiKey: UserApiKey | null;
+  user: User;
+  /** Stable callbacks that take the card's id: a new closure per card per render would defeat the memo. */
+  onSelect(id: string, page: number | null): void;
+  onDelete(id: string): void;
 }
 
-/** One snipped problem: its image, tags, solution and takeaway in a single card that saves itself. */
-export function SnipCard({ card, number, selected, landing, onSelect, onDelete }: Props) {
-  const { snapshot, user, t, actions } = useVault();
+/**
+ * One snipped problem: its image, tags, solution and takeaway in a single card that saves itself.
+ * Memoized: rendering the question (Markdown + KaTeX) is the expensive part of the tray, so a card re-renders only when its own
+ * data, selection or props change.
+ */
+export const SnipCard = React.memo(function SnipCard({ card, number, selected, landing, subject, aiKey: key, user, onSelect, onDelete }: Props) {
+  const { t } = useI18n();
+  const actions = useActions();
   const [showImage, setShowImage] = React.useState(false);
   /** What is being typed in the editor, so the preview follows every keystroke (the card itself updates after a pause). */
   const [draftText, setDraftText] = React.useState<string | null>(null);
   const [converting, setConverting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const subject = snapshot.subjects.find((s) => s.id === card.subjectId) ?? null;
-  const key = pickAiKey(snapshot.apiKeys, subject);
   const hasText = card.questionLatex.trim().length > 0;
 
   async function convert() {
@@ -61,7 +70,7 @@ export function SnipCard({ card, number, selected, landing, onSelect, onDelete }
       className={cn("overflow-hidden rounded-lg border bg-card shadow-xs transition-[border-color,box-shadow]", selected ? "border-brand shadow-sm" : "border-border")}
     >
       <header className="flex items-center gap-1 py-1.5 pr-1.5 pl-3">
-        <button type="button" onClick={onSelect} title={card.sourcePage ? format(t.sources.tray.goToPage, { n: card.sourcePage }) : undefined} className="flex min-w-0 flex-1 items-baseline gap-2 rounded-sm text-left">
+        <button type="button" onClick={() => onSelect(card.id, card.sourcePage)} title={card.sourcePage ? format(t.sources.tray.goToPage, { n: card.sourcePage }) : undefined} className="flex min-w-0 flex-1 items-baseline gap-2 rounded-sm text-left">
           <span className="text-heading tabular-nums">{format(t.problem.label, { n: number })}</span>
           {card.sourcePage !== null && <span className="text-caption text-subtle tabular-nums">{format(t.problem.pageShort, { n: card.sourcePage })}</span>}
         </button>
@@ -76,7 +85,7 @@ export function SnipCard({ card, number, selected, landing, onSelect, onDelete }
         >
           <Flag />
         </Button>
-        <Button variant="ghost" size="icon-sm" aria-label={t.problem.delete} title={t.problem.delete} onClick={onDelete}>
+        <Button variant="ghost" size="icon-sm" aria-label={t.problem.delete} title={t.problem.delete} onClick={() => onDelete(card.id)}>
           <Trash2 />
         </Button>
       </header>
@@ -126,4 +135,4 @@ export function SnipCard({ card, number, selected, landing, onSelect, onDelete }
       </div>
     </article>
   );
-}
+});

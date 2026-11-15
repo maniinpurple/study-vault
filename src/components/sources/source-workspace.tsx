@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/field";
 import { format } from "@/lib/i18n";
 import { spring } from "@/lib/motion";
+import { pickAiKey } from "@/lib/ai-keys";
 import { cropRegions, orderSnips } from "@/lib/problems";
 import type { CropRegion, ExamUpload } from "@/lib/repo/types";
 import type { NormBox } from "@/lib/scan-geometry";
@@ -29,6 +30,8 @@ interface Flight {
   to: DOMRect | null;
 }
 
+const NO_SNIPS: PageSnip[] = [];
+const NO_PENDING: PendingRegion[] = [];
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 
@@ -92,11 +95,19 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const subjectId = subjects.find((s) => s.id === upload?.subjectId)?.id ?? subjects.find((s) => s.id === activeSubjectId)?.id ?? subjects[0]?.id ?? null;
   const snips = React.useMemo(() => orderSnips(snapshot.cards, sourceId), [snapshot.cards, sourceId]);
-  const numbers = new Map(snips.map((card, i) => [card.id, i + 1]));
   const stitching = pending.length > 1;
   const newest = pending[pending.length - 1] ?? null;
   /** Pending regions in the order they will be stacked, numbered from 1. */
   const ordered = React.useMemo(() => sortRegions(pending), [pending]);
+
+  /**
+   * The values the stable callbacks below need. They are passed to memoized children (the pages and the tray cards), so they must
+   * keep one identity for the life of the workspace; reading the current state from here, instead of closing over it, lets them.
+   */
+  const live = React.useRef({ pending, ordered, newest, doc, upload, subjectId, t, actions });
+  React.useEffect(() => {
+    live.current = { pending, ordered, newest, doc, upload, subjectId, t, actions };
+  });
 
   // Escape abandons a stitch in progress.
   React.useEffect(() => {
@@ -122,21 +133,9 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
     setFlight({ ...flight, to: rect });
   }, [flight, snips]);
 
-  if (!upload) {
-    return (
-      <div className="grid h-[calc(100dvh-var(--chrome))] place-items-center px-6">
-        <div className="space-y-3 text-center">
-          <p className="text-sm text-muted-foreground">{t.sources.notFound}</p>
-          <Link href="/sources" className="text-sm font-medium text-brand hover:underline">
-            {t.sources.back}
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   /** Crop, upload and show a problem built from one or more regions of the document. */
-  async function saveRegions(regions: CropRegion[], from: DOMRect) {
+  const saveRegions = React.useCallback(async (regions: CropRegion[], from: DOMRect) => {
+    const { doc, upload, subjectId, t, actions } = live.current;
     if (!doc || !upload) return;
     if (!subjectId) return setError(t.sources.needSubject);
     setError(null);
@@ -153,31 +152,38 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
     } catch {
       setError(t.sources.tray.saveFailed);
     }
-  }
+  }, []);
 
   /** A finished drag becomes a pending region: nothing is saved until the floating Save button is pressed. */
-  function onRegion(page: number, box: NormBox) {
+  const onRegion = React.useCallback((page: number, box: NormBox) => {
+    const { pending, t } = live.current;
     if (pending.length >= MAX_STITCH_PARTS) return setError(format(t.sources.stitch.tooMany, { n: MAX_STITCH_PARTS }));
     setError(null);
     setPending((prev) => [...prev, { key: crypto.randomUUID(), page, ...box }]);
-  }
+  }, []);
 
   /** Where a region currently is on screen (the page may have been scrolled or zoomed since it was drawn). */
-  function regionRect(region: CropRegion): DOMRect {
+  const regionRect = React.useCallback((region: CropRegion): DOMRect => {
     const frame = viewerRef.current?.querySelector(`[data-page="${region.page}"]`)?.getBoundingClientRect();
     return frame ? new DOMRect(frame.left + region.x * frame.width, frame.top + region.y * frame.height, region.w * frame.width, region.h * frame.height) : new DOMRect();
-  }
+  }, []);
 
-  const toolbar: RegionToolbar = {
-    saveLabel: stitching ? t.sources.stitch.save : t.sources.tools.save,
-    deleteLabel: t.sources.tools.remove,
-    onSave: () => newest && void saveRegions(ordered, regionRect(newest)),
-    // Delete takes back the newest region; the toolbar moves to the one before it.
-    onDelete: () => setPending((prev) => prev.slice(0, -1)),
-  };
+  const toolbar = React.useMemo<RegionToolbar>(
+    () => ({
+      saveLabel: stitching ? t.sources.stitch.save : t.sources.tools.save,
+      deleteLabel: t.sources.tools.remove,
+      onSave: () => {
+        const { newest, ordered } = live.current;
+        if (newest) void saveRegions(ordered, regionRect(newest));
+      },
+      // Delete takes back the newest region; the toolbar moves to the one before it.
+      onDelete: () => setPending((prev) => prev.slice(0, -1)),
+    }),
+    [stitching, t, saveRegions, regionRect],
+  );
 
   /** Scroll the viewer so `page` sits at the top, keeping the current zoom. */
-  function goToPage(page: number) {
+  const goToPage = React.useCallback((page: number) => {
     const zoom = zoomRef.current;
     const frame = viewerRef.current?.querySelector(`[data-page="${page}"]`);
     const content = zoom?.instance.contentComponent;
@@ -185,31 +191,64 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
     const { positionX, scale: current } = zoom.instance.state;
     const top = (frame.getBoundingClientRect().top - content.getBoundingClientRect().top) / current;
     void zoom.setTransform(positionX, -top * current + 8, current, 300, "easeOut");
-  }
+  }, []);
 
-  function selectFromPage(id: string) {
+  const selectFromPage = React.useCallback((id: string) => {
     setSelectedId(id);
     setTrayOpen(true);
     trayRef.current?.querySelector(`[data-snip-card="${id}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, []);
+
+  const selectFromTray = React.useCallback(
+    (id: string, page: number | null) => {
+      setSelectedId(id);
+      if (page === null) return;
+      setTrayOpen(false);
+      // The tray is hidden on small screens until the viewer is shown again; wait a frame for it to lay out.
+      requestAnimationFrame(() => goToPage(page));
+    },
+    [goToPage],
+  );
+
+  // Stable for the memoized pages: only a language change makes new ones.
+  const pageLabels = React.useMemo(
+    () => ({
+      page: (n: number) => format(t.problem.page, { n }),
+      snip: (n: number) => format(t.problem.label, { n }),
+      part: (n: number, page: number) => format(t.sources.stitch.part, { n, page: format(t.problem.pageShort, { n: page }) }),
+      rendering: t.sources.tools.rendering,
+      failed: t.sources.tools.renderFailed,
+    }),
+    [t],
+  );
+
+  /** Saved and pending regions grouped by page, rebuilt only when the cards or the pending regions change. */
+  const snipsByPage = React.useMemo(() => {
+    const byPage = new Map<number, PageSnip[]>();
+    snips.forEach((card, i) => {
+      for (const r of cropRegions(card)) byPage.set(r.page, [...(byPage.get(r.page) ?? []), { id: card.id, number: i + 1, box: { x: r.x, y: r.y, w: r.w, h: r.h } }]);
+    });
+    return byPage;
+  }, [snips]);
+  const pendingByPage = React.useMemo(() => {
+    const byPage = new Map<number, PendingRegion[]>();
+    ordered.forEach((r, i) => byPage.set(r.page, [...(byPage.get(r.page) ?? []), { key: r.key, number: i + 1, box: { x: r.x, y: r.y, w: r.w, h: r.h }, newest: r.key === newest?.key }]));
+    return byPage;
+  }, [ordered, newest]);
+
+  if (!upload) {
+    return (
+      <div className="grid h-[calc(100dvh-var(--chrome))] place-items-center px-6">
+        <div className="space-y-3 text-center">
+          <p className="text-sm text-muted-foreground">{t.sources.notFound}</p>
+          <Link href="/sources" className="text-sm font-medium text-brand hover:underline">
+            {t.sources.back}
+          </Link>
+        </div>
+      </div>
+    );
   }
 
-  function selectFromTray(id: string, page: number | null) {
-    setSelectedId(id);
-    if (page === null) return;
-    setTrayOpen(false);
-    // The tray is hidden on small screens until the viewer is shown again; wait a frame for it to lay out.
-    requestAnimationFrame(() => goToPage(page));
-  }
-
-  const pageLabels = {
-    snip: (n: number) => format(t.problem.label, { n }),
-    rendering: t.sources.tools.rendering,
-    failed: t.sources.tools.renderFailed,
-  };
-  const snipsOf = (page: number): PageSnip[] =>
-    snips.flatMap((card) => cropRegions(card).filter((r) => r.page === page).map((r) => ({ id: card.id, number: numbers.get(card.id) ?? 0, box: { x: r.x, y: r.y, w: r.w, h: r.h } })));
-  const pendingOf = (page: number): PendingRegion[] =>
-    ordered.flatMap((r, i) => (r.page === page ? [{ key: r.key, number: i + 1, box: { x: r.x, y: r.y, w: r.w, h: r.h }, newest: r.key === newest?.key }] : []));
   const tool = (active: boolean) => cn("relative flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[14px] transition-colors", active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground");
 
   return (
@@ -316,12 +355,12 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
                           doc={doc}
                           page={page}
                           scrollRoot={viewerRef}
-                          snips={snipsOf(page)}
-                          pending={pendingOf(page)}
+                          snips={snipsByPage.get(page) ?? NO_SNIPS}
+                          pending={pendingByPage.get(page) ?? NO_PENDING}
                           toolbar={toolbar}
                           selectedId={selectedId}
                           snipMode={snipMode}
-                          labels={{ ...pageLabels, page: format(t.problem.page, { n: page }), part: (n) => format(t.sources.stitch.part, { n, page: format(t.problem.pageShort, { n: page }) }) }}
+                          labels={pageLabels}
                           onSnip={onRegion}
                           onSelect={selectFromPage}
                         />
@@ -372,18 +411,24 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
           ) : (
             <ul className="space-y-3 p-3">
               <AnimatePresence initial={false} mode="popLayout">
-                {snips.map((card) => (
-                  <motion.li key={card.id} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} transition={spring.smooth}>
-                    <SnipCard
-                      card={card}
-                      number={numbers.get(card.id) ?? 0}
-                      selected={card.id === selectedId}
-                      landing={flight?.id === card.id}
-                      onSelect={() => selectFromTray(card.id, card.sourcePage)}
-                      onDelete={() => setDeletingId(card.id)}
-                    />
-                  </motion.li>
-                ))}
+                {snips.map((card, i) => {
+                  const subject = snapshot.subjects.find((s) => s.id === card.subjectId) ?? null;
+                  return (
+                    <motion.li key={card.id} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} transition={spring.smooth}>
+                      <SnipCard
+                        card={card}
+                        number={i + 1}
+                        selected={card.id === selectedId}
+                        landing={flight?.id === card.id}
+                        subject={subject}
+                        aiKey={pickAiKey(snapshot.apiKeys, subject)}
+                        user={snapshot.user}
+                        onSelect={selectFromTray}
+                        onDelete={setDeletingId}
+                      />
+                    </motion.li>
+                  );
+                })}
               </AnimatePresence>
             </ul>
           )}
