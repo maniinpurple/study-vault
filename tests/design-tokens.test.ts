@@ -20,7 +20,9 @@ import {
   bootScript,
   deriveAccentTokens,
   deriveAccentVars,
+  isFlatUi,
   isNavLayout,
+  UI_MODES,
   isThemeStyle,
   normalizeHex,
   parseAccentVars,
@@ -57,12 +59,18 @@ const stylePalettes = THEME_STYLES.flatMap((style) =>
     return { style: style as string, mode, tokens: new Map([...accentDefaults[mode], ...own]), own };
   }),
 );
-/** The interface mode "Ultra-minimal" brings a complete palette of its own, so it is held to the same contract as a style. */
-const ultraPalettes = MODES.map((mode) => {
-  const own = tokens(`html[data-ui-mode="ultra-minimal"][data-mode="${mode}"]`);
-  return { style: "ultra-minimal", mode, tokens: new Map([...accentDefaults[mode], ...own]), own };
-});
-const palettes = [...stylePalettes, ...ultraPalettes];
+/** The interface modes "Ultra-minimal" and "LangKu" each bring a complete palette of their own, so they are held to the same contract as a style. */
+const FLAT_MODES = ["ultra-minimal", "langku"] as const;
+const flatPalettes = FLAT_MODES.flatMap((uiMode) =>
+  MODES.map((mode) => {
+    const own = tokens(`html[data-ui-mode="${uiMode}"][data-mode="${mode}"]`);
+    return { style: uiMode as string, mode, tokens: new Map([...accentDefaults[mode], ...own]), own };
+  }),
+);
+const ultraPalettes = flatPalettes.filter((p) => p.style === "ultra-minimal");
+const langkuPalettes = flatPalettes.filter((p) => p.style === "langku");
+const palettes = [...stylePalettes, ...flatPalettes];
+const SHARED_STRUCTURE = 'html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"])';
 
 const SURFACES = ["background", "card", "sunken", "popover"];
 const PAIRS: [string, string[], number][] = [
@@ -124,7 +132,7 @@ describe("style palettes", () => {
     it("keeps surfaces within the limits the accent derivation relies on, and never a pure white or black page", () => {
       for (const surface of SURFACES) expect(surfaceWithinLimit(mode, all.get(surface)!), `${style} ${mode} ${surface}`).toBe(true);
       // Ultra-minimal is the one look whose page is deliberately pure white / near-black.
-      if (style !== "ultra-minimal") expect(rgbToHex(all.get("background")!)).not.toMatch(/^#(FFFFFF|000000)$/);
+      if (!FLAT_MODES.some((m) => m === style)) expect(rgbToHex(all.get("background")!)).not.toMatch(/^#(FFFFFF|000000)$/);
     });
     it.each(PAIRS)("%s clears its contrast target", (text, surfaces, min) => {
       for (const surface of surfaces) expect(contrastRatio(all.get(text)!, all.get(surface)!), `${text} on ${surface}`).toBeGreaterThanOrEqual(min);
@@ -175,6 +183,8 @@ describe("appearance helpers", () => {
     expect(isThemeStyle("neon")).toBe(false);
     expect(isNavLayout("topbar")).toBe(true);
     expect(isNavLayout("left")).toBe(false);
+    expect([...UI_MODES]).toEqual(["standard", "ultra-minimal", "langku"]);
+    expect(UI_MODES.map(isFlatUi)).toEqual([false, true, true]);
     expect(DEFAULT_STYLE).toBe("minimal");
     expect(DEFAULT_LAYOUT).toBe("sidebar");
     expect(DEFAULT_ACCENT).toBe(ACCENT_PRESETS[0].hex);
@@ -210,6 +220,7 @@ describe("boot script (runs before first paint)", () => {
 
   it("restores the interface mode, and ignores an unknown one", () => {
     expect(run({ [APPEARANCE_KEYS.uiMode]: "ultra-minimal" }).root.dataset.uiMode).toBe("ultra-minimal");
+    expect(run({ [APPEARANCE_KEYS.uiMode]: "langku" }).root.dataset.uiMode).toBe("langku");
     expect(run({ [APPEARANCE_KEYS.uiMode]: "brutal" }).root.dataset.uiMode).toBeUndefined();
   });
 
@@ -250,16 +261,29 @@ describe("globals.css isolation", () => {
   it("Ultra-minimal: pure canvas (#FFFFFF light, #0A0A0A dark) and only variables in its structure block", () => {
     expect(rgbToHex(ultraPalettes[0].own.get("background")!)).toBe("#FFFFFF");
     expect(rgbToHex(ultraPalettes[1].own.get("background")!)).toBe("#0A0A0A");
-    for (const selector of ['html[data-ui-mode="ultra-minimal"]', 'html[data-ui-mode="ultra-minimal"][data-mode="light"]', 'html[data-ui-mode="ultra-minimal"][data-mode="dark"]']) {
+    for (const selector of [SHARED_STRUCTURE, 'html[data-ui-mode="ultra-minimal"][data-mode="light"]', 'html[data-ui-mode="ultra-minimal"][data-mode="dark"]', 'html[data-ui-mode="langku"][data-mode="light"]', 'html[data-ui-mode="langku"][data-mode="dark"]']) {
       const body = block(selector).split("{")[1];
       for (const declaration of body.split(/;\s*\n/).map((d) => d.trim()).filter(Boolean)) expect(declaration.startsWith("--"), `${selector}: ${declaration}`).toBe(true);
     }
   });
 
-  it("scopes every ultra-minimal element rule to the attribute (or to its own helper classes)", () => {
-    const selectors = [...css.matchAll(/^(html\[data-ui-mode="ultra-minimal"\][^{\n]*|\.vl-(?:ultra-only|split)[^{\n]*) \{/gm)].map((m) => m[1]);
-    expect(selectors.length).toBeGreaterThan(10);
-    for (const selector of selectors) expect(selector, selector).toMatch(/^(html\[data-ui-mode="ultra-minimal"\]|\.vl-ultra-only|\.vl-split)/);
+  it("LangKu: pure canvas (#FFFFFF light, #09090B dark), ink #111111 and the specified grays", () => {
+    const hex = (p: (typeof langkuPalettes)[number], name: string) => rgbToHex(p.own.get(name)!);
+    expect(hex(langkuPalettes[0], "background")).toBe("#FFFFFF");
+    expect(hex(langkuPalettes[1], "background")).toBe("#09090B");
+    expect(hex(langkuPalettes[0], "foreground")).toBe("#111111");
+    expect(hex(langkuPalettes[0], "muted-foreground")).toBe("#71717A");
+    // The lighter #A1A1AA from the brief is 2.6:1 on white: too faint for text, so it is deliberately not used as a text color.
+    expect(contrastRatio(parseHex("#a1a1aa")!, [255, 255, 255])).toBeLessThan(3);
+    expect(contrastRatio(langkuPalettes[0].own.get("subtle-foreground")!, [255, 255, 255])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("scopes every flat-mode element rule to the attributes (or to their own helper classes)", () => {
+    const selectors = [...css.matchAll(/^(html(?::is\(\[data-ui-mode="ultra-minimal"\], \[data-ui-mode="langku"\]\)|\[data-ui-mode="(?:ultra-minimal|langku)"\])[^{\n]*|\.vl-(?:ultra-only|split)[^{\n]*) \{/gm)].map((m) => m[1]);
+    expect(selectors.length).toBeGreaterThan(20);
+    for (const selector of selectors) expect(selector, selector).toMatch(/^(html(:is\(\[data-ui-mode="ultra-minimal"\], \[data-ui-mode="langku"\]\)|\[data-ui-mode="(ultra-minimal|langku)"\])|\.vl-ultra-only|\.vl-split)/);
+    // Nothing in the stylesheet reaches a flat mode without naming it.
+    expect(css).not.toMatch(/^html\[data-ui-mode="standard"\]/m);
   });
 
   it("lists every style and layout the app offers", () => {

@@ -111,6 +111,10 @@ typography-only look that keeps every feature. It is separate from the theme: th
   topic, due date, status — the homework fields, editable in place — with the column headers under the rows acting as sorts). The vault is always hairline rows (the view switch is hidden).
 - **Document viewer** (`/sources/[id]`): the Darkroom (`darkroom-bar.tsx`): a single `h-12` zinc-900 bar (back, breadcrumb with editable subject and title, due date, pages, zoom, rotate, select area / pan, help; status,
   notes, download), a charcoal canvas and a floating `w-80` notes card holding the cropped questions, their AI reconstruction and analysis.
+- **LangKu** (`data-ui-mode="langku"`) is a third mode on the same structure (all rules above are shared through `html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"])`, and components ask
+  `isFlatUi(uiMode)`). It differs in: its own palette (page `#FFFFFF` / `#09090B`, ink `#111111`, secondary `#71717A`); **every text button, primary or secondary, is an underlined link** (icon-only `size-7…size-10`
+  buttons keep their shape); a `bg-zinc-800` stage and a zero-shadow notes card whose header carries a tiny status dot (green = completed, amber = pending). The brief's subtle gray `#A1A1AA` is 2.6:1 on white, which
+  fails AA for text, so `subtle-foreground` is `#71717A` too (the test pins both facts).
 - **Kept as is**: the speed-dial button (monochrome circles via `[data-fab]`), Scratchpad, Math Pad, the circular mode reveal and the language shockwave.
 
 ---

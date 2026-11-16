@@ -10,6 +10,7 @@ import { Modal } from "@/components/modal";
 import { HomeworkControls } from "@/components/sources/homework-controls";
 import { SourcesTable } from "@/components/sources/sources-table";
 import { UltraSplit } from "@/components/ultra-split";
+import { isFlatUi } from "@/lib/appearance";
 import { useAppearance } from "@/components/use-appearance";
 import { StoredImage } from "@/components/stored-image";
 import { LoadMore, useVisibleCount } from "@/components/load-more";
@@ -52,7 +53,7 @@ export function SourcesLibrary() {
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const scope = subjects.find((s) => s.id === activeSubjectId) ?? null;
   const [sort, setSort] = useStoredChoice<SourceSort>(STORAGE_KEYS.sourcesSort, SOURCE_SORTS, DEFAULT_SOURCE_SORT);
-  const ultra = useAppearance().uiMode === "ultra-minimal";
+  const ultra = isFlatUi(useAppearance().uiMode);
   const subjectNameOf = (source: ExamUpload) => subjects.find((s) => s.id === source.subjectId)?.name ?? null;
   const sources = sortSources(snapshot.examUploads.filter((u) => !scope || u.subjectId === scope.id), sort, locale, subjectNameOf);
   /** The student's own calendar day, which "overdue" and "due today" are measured against. */

@@ -183,8 +183,8 @@ export const vi = {
   },
   ultra: {
     modeLabel: "Chế độ hiển thị",
-    modeHint: "Tối giản chỉ còn chữ: không thẻ, không viền dày, không bóng đổ. Mọi tính năng vẫn giữ nguyên.",
-    modes: { standard: "Tiêu chuẩn", "ultra-minimal": "Tối giản" },
+    modeHint: "Tối giản và LangKu chỉ còn chữ: không thẻ, không viền dày, không bóng đổ. LangKu thoáng hơn và biến mọi nút chữ thành liên kết gạch chân. Mọi tính năng vẫn giữ nguyên.",
+    modes: { standard: "Tiêu chuẩn", "ultra-minimal": "Tối giản", langku: "LangKu" },
     subjects: "Môn học",
     filterSubjects: "Lọc môn học…",
     noSubjects: "Không có môn nào khớp.",

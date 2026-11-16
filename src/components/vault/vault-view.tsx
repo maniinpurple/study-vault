@@ -15,6 +15,7 @@ import { QuickCaptureButton } from "@/components/quick-capture";
 import { Button } from "@/components/ui/button";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import { UltraSplit } from "@/components/ultra-split";
+import { isFlatUi } from "@/lib/appearance";
 import { useAppearance } from "@/components/use-appearance";
 import { useObjectUrl } from "@/components/use-object-url";
 import { LoadMore, useVisibleCount } from "@/components/load-more";
@@ -44,7 +45,7 @@ export function VaultView() {
   const [adding, setAdding] = React.useState(false);
   const [storedView, setView] = useStoredChoice<ViewMode>(STORAGE_KEYS.vaultView, VIEW_MODES, "box");
   // Ultra-minimal shows the vault only as hairline rows; the grid and detailed views (and their switch) stay for Standard mode.
-  const ultra = useAppearance().uiMode === "ultra-minimal";
+  const ultra = isFlatUi(useAppearance().uiMode);
   const view = ultra ? "list" : storedView;
 
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);

@@ -11,6 +11,7 @@ import { Modal } from "@/components/modal";
 import { HelpTip } from "@/components/sources/help-tip";
 import { SnipCard } from "@/components/sources/snip-card";
 import { DarkroomBar } from "@/components/sources/darkroom-bar";
+import { isFlatUi } from "@/lib/appearance";
 import { useAppearance } from "@/components/use-appearance";
 import { usePanKey } from "@/components/use-pan-key";
 import { useStoredChoice } from "@/components/use-stored-choice";
@@ -106,7 +107,9 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
   const panKeyOn = usePanKey(panKeyMode, true);
   const cropping = snipMode && !panKeyOn;
   // Ultra-minimal: the "Darkroom" layout (slim dark bar, charcoal canvas, floating notes card).
-  const ultra = useAppearance().uiMode === "ultra-minimal";
+  const { uiMode } = useAppearance();
+  const ultra = isFlatUi(uiMode);
+  const langku = uiMode === "langku";
   const [notesOpen, setNotesOpen] = React.useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches);
   const pageNowRef = React.useRef<HTMLSpanElement>(null);
   const lastPageCheck = React.useRef(0);
@@ -416,7 +419,7 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
 
       <div className={cn("flex min-h-0 flex-1", ultra && "relative")}>
         {/* Document: pinch (or ctrl + wheel) zooms, two-finger scroll pans; dragging pans only in the Scroll tool. */}
-        <div className={cn("relative flex min-w-0 flex-1 flex-col bg-sunken", ultra && "bg-zinc-800/95", !ultra && trayOpen && "hidden lg:flex")}>
+        <div className={cn("relative flex min-w-0 flex-1 flex-col bg-sunken", ultra && (langku ? "bg-zinc-800" : "bg-zinc-800/95"), !ultra && trayOpen && "hidden lg:flex")}>
           <p className={cn("z-10 shrink-0 border-b border-border bg-sunken px-4 py-1.5 text-caption text-muted-foreground", ultra && "border-zinc-700 bg-transparent text-zinc-300", ultra && !error && !panKeyOn && "hidden")} role={error ? "alert" : undefined}>
             {error ? (
               <span className="text-destructive">{error}</span>
@@ -516,6 +519,7 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
         <aside
           ref={trayRef}
           aria-label={ultra ? t.ultra.notes : t.sources.tray.title}
+          data-darkroom-notes={ultra ? "" : undefined}
           className={
             ultra
               ? cn("absolute inset-x-3 top-3 bottom-3 z-20 overflow-y-auto rounded-lg border border-border bg-background text-foreground shadow-lg sm:inset-x-auto sm:right-4 sm:w-80", notesOpen ? "block" : "hidden")
@@ -523,7 +527,11 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
           }
         >
           <div className="sticky top-0 z-10 flex items-baseline justify-between border-b border-border bg-background/90 px-4 py-2.5 backdrop-blur-sm">
-            <h2 className={cn("text-heading", ultra && "text-[11px] font-normal tracking-wider text-muted-foreground uppercase")}>{ultra ? t.ultra.notes : t.sources.tray.title}</h2>
+            <h2 className={cn("flex items-center gap-2 text-heading", ultra && "text-[11px] font-normal tracking-wider text-muted-foreground uppercase")}>
+              {/* LangKu: a tiny status dot, green once the source is completed and amber while it is pending. */}
+              {langku && <span aria-hidden className={cn("size-1.5 rounded-full", upload.completed ? "bg-success" : "bg-warning")} />}
+              {ultra ? t.ultra.notes : t.sources.tray.title}
+            </h2>
             <span className="text-caption text-subtle tabular-nums">{snips.length > 0 ? format(t.sources.snips, { n: snips.length }) : ""}</span>
           </div>
           {snips.length === 0 ? (

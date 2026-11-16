@@ -185,8 +185,8 @@ export const en: Dictionary = {
   },
   ultra: {
     modeLabel: "Interface mode",
-    modeHint: "Ultra-minimal keeps only the type: no cards, no heavy borders, no shadows. Every feature stays.",
-    modes: { standard: "Standard", "ultra-minimal": "Ultra-minimal" },
+    modeHint: "Ultra-minimal and LangKu keep only the type: no cards, no heavy borders, no shadows. LangKu is airier and turns every text button into an underlined link. Every feature stays.",
+    modes: { standard: "Standard", "ultra-minimal": "Ultra-minimal", langku: "LangKu" },
     subjects: "Subjects",
     filterSubjects: "Filter subjects…",
     noSubjects: "No subject matches.",

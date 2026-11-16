@@ -560,7 +560,7 @@ html[data-mode="dark"] {
 
 /* ═════════ ULTRA-MINIMAL interface mode: pure canvas, typography only. It replaces the style's palette and shape ═════════
    (`data-ui-mode` outranks `data-theme`, so whichever style is chosen, this look wins), and keeps the accent. */
-html[data-ui-mode="ultra-minimal"] {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) {
   --r-xs: 2px;
   --r-sm: 2px;
   --r-md: 3px;
@@ -612,6 +612,54 @@ html[data-ui-mode="ultra-minimal"][data-mode="dark"] {
   --border: #27272a;
   --input: #71717a;
   --foreground: #fafafa;
+  --muted-foreground: #a1a1aa;
+  --subtle-foreground: #8e8e98;
+  --mark: #f6ce45;
+  --mark-soft: #3b3210;
+  --mark-foreground: #f5de86;
+  --success: #4ade80;
+  --success-soft: #12331f;
+  --warning: #fbbf24;
+  --warning-soft: #3a2b0b;
+  --destructive: #f87171;
+  --destructive-soft: #40191b;
+  --shadow-ink: #000000;
+  --scrim: oklch(0 0 0 / 0.6);
+}
+
+/* ═════════ LANGKU interface mode: editorial, airy, typography only. Ink #111111, grays #71717A; pure canvas #FFFFFF / #09090B ═════════
+   Shape and structure are shared with Ultra-minimal (above). The subtle gray is #71717A as well: the lighter #A1A1AA would be 2.6:1 on white
+   and fail WCAG AA for text, so the tests do not allow it. */
+html[data-ui-mode="langku"][data-mode="light"] {
+  --background: #ffffff;
+  --sunken: #fafafa;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --border: #e4e4e7;
+  --input: #71717a;
+  --foreground: #111111;
+  --muted-foreground: #71717a;
+  --subtle-foreground: #71717a;
+  --mark: #fde68a;
+  --mark-soft: #fef3c7;
+  --mark-foreground: #713f12;
+  --success: #15803d;
+  --success-soft: #dcfce7;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --destructive: #c81e1e;
+  --destructive-soft: #fee2e2;
+  --shadow-ink: #111111;
+  --scrim: oklch(0.2 0 0 / 0.4);
+}
+html[data-ui-mode="langku"][data-mode="dark"] {
+  --background: #09090b;
+  --sunken: #111113;
+  --card: #09090b;
+  --popover: #131316;
+  --border: #27272a;
+  --input: #71717a;
+  --foreground: #f4f4f5;
   --muted-foreground: #a1a1aa;
   --subtle-foreground: #8e8e98;
   --mark: #f6ce45;
@@ -793,26 +841,26 @@ html[data-ui-mode="ultra-minimal"][data-mode="dark"] {
 }
 
 /*
- * ULTRA-MINIMAL interface mode (`data-ui-mode="ultra-minimal"`, DESIGN_SYSTEM.md §2.6): the structure that variables cannot express.
+ * ULTRA-MINIMAL interface mode (`data-ui-mode="ultra-minimal"` and `"langku"` share it, DESIGN_SYSTEM.md §2.6): the structure that variables cannot express.
  * Every rule is scoped to the attribute, so Standard mode is untouched. Unlayered, so it beats the layered Tailwind utilities.
  */
 .vl-ultra-only {
   display: none;
 }
-html[data-ui-mode="ultra-minimal"] .vl-ultra-only {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-ultra-only {
   display: block;
 }
-html[data-ui-mode="ultra-minimal"] .vl-standard-only {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-standard-only {
   display: none;
 }
 /* The shell: no sidebar, no side navigation, no mobile bar. The text row (`.vl-ultra-only`) replaces them. */
-html[data-ui-mode="ultra-minimal"] .vl-rail,
-html[data-ui-mode="ultra-minimal"] .vl-topnav,
-html[data-ui-mode="ultra-minimal"] .vl-mobilebar {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-rail,
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-topnav,
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-mobilebar {
   display: none;
 }
 /* Breathing room: a max-w-5xl column with px-8 / py-10. */
-html[data-ui-mode="ultra-minimal"] .vl-page {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-page {
   max-width: 64rem;
   padding: 2.5rem 2rem;
 }
@@ -820,57 +868,57 @@ html[data-ui-mode="ultra-minimal"] .vl-page {
 .vl-split {
   display: block;
 }
-html[data-ui-mode="ultra-minimal"] .vl-split {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-split {
   display: flex;
   align-items: flex-start;
   gap: 3rem;
 }
 @media (max-width: 767px) {
-  html[data-ui-mode="ultra-minimal"] .vl-split {
+  html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-split {
     flex-direction: column;
     gap: 1.5rem;
   }
-  html[data-ui-mode="ultra-minimal"] .vl-split > .vl-ultra-only {
+  html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-split > .vl-ultra-only {
     width: 100%;
   }
 }
-html[data-ui-mode="ultra-minimal"] .vl-vault-controls {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .vl-vault-controls {
   margin-inline: 0;
   padding-inline: 0;
 }
 
 /* No cards: no border, no fill, no radius, no shadow. Lists keep only their hairline dividers. */
-html[data-ui-mode="ultra-minimal"] .border.bg-card {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .border.bg-card {
   border-width: 0;
   border-radius: 0;
   background-color: transparent;
   box-shadow: none;
 }
 /* Wobble belongs to Doodle only. */
-html[data-ui-mode="ultra-minimal"] .rounded-sm {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .rounded-sm {
   border-radius: var(--r-sm);
 }
-html[data-ui-mode="ultra-minimal"] .rounded-md {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .rounded-md {
   border-radius: var(--r-md);
 }
-html[data-ui-mode="ultra-minimal"] .rounded-lg {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .rounded-lg {
   border-radius: var(--r-lg);
 }
-html[data-ui-mode="ultra-minimal"] .rounded-xl {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .rounded-xl {
   border-radius: var(--r-xl);
 }
-html[data-ui-mode="ultra-minimal"] .rounded-2xl {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .rounded-2xl {
   border-radius: var(--r-2xl);
 }
 
 /* Buttons are text. The primary action is an underlined link; every other button loses its box (hover shows a hairline of muted ground). */
-html[data-ui-mode="ultra-minimal"] .group\/button {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .group\/button {
   background-color: transparent;
   border-color: transparent;
   box-shadow: none;
   translate: none;
 }
-html[data-ui-mode="ultra-minimal"] .group\/button.bg-primary {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .group\/button.bg-primary {
   height: auto;
   padding-inline: 0;
   color: var(--brand);
@@ -878,15 +926,15 @@ html[data-ui-mode="ultra-minimal"] .group\/button.bg-primary {
   text-decoration-line: underline;
   text-underline-offset: 4px;
 }
-html[data-ui-mode="ultra-minimal"] .group\/button.bg-primary:hover:not(:disabled) {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .group\/button.bg-primary:hover:not(:disabled) {
   opacity: 0.7;
 }
-html[data-ui-mode="ultra-minimal"] .group\/button:not(.bg-primary):hover:not(:disabled) {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) .group\/button:not(.bg-primary):hover:not(:disabled) {
   background-color: var(--muted);
 }
 
 /* The speed-dial button and its two satellites: understated monochrome circles. */
-html[data-ui-mode="ultra-minimal"] [data-fab] {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) [data-fab] {
   background-color: var(--background);
   color: var(--foreground);
   border-width: 1px;
@@ -894,13 +942,33 @@ html[data-ui-mode="ultra-minimal"] [data-fab] {
   box-shadow: var(--elevation-md);
   translate: none;
 }
-html[data-ui-mode="ultra-minimal"] [data-fab="main"] {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) [data-fab="main"] {
   background-color: var(--foreground);
   color: var(--background);
   border-color: var(--foreground);
 }
-html[data-ui-mode="ultra-minimal"] [data-fab][aria-checked="true"] {
+html:is([data-ui-mode="ultra-minimal"], [data-ui-mode="langku"]) [data-fab][aria-checked="true"] {
   border-color: var(--foreground);
+}
+
+/*
+ * LANGKU interface mode (`data-ui-mode="langku"`): the same flat, typography-only structure as above, with its own ink and one
+ * addition: every text button, primary or secondary, is an underlined link ("ultra-quiet inline text control"). Icon-only buttons
+ * (the size-7 … size-10 variants) keep their shape. The notes card in the Darkroom loses its shadow.
+ */
+html[data-ui-mode="langku"] .group\/button:not(.size-7, .size-8, .size-9, .size-10) {
+  height: auto;
+  padding-inline: 0;
+  font-weight: 500;
+  text-decoration-line: underline;
+  text-underline-offset: 4px;
+}
+html[data-ui-mode="langku"] .group\/button:not(.size-7, .size-8, .size-9, .size-10):hover:not(:disabled) {
+  background-color: transparent;
+  opacity: 0.7;
+}
+html[data-ui-mode="langku"] [data-darkroom-notes] {
+  box-shadow: none;
 }
 
 /*

@@ -18,10 +18,16 @@ export const NAV_LAYOUTS = ["sidebar", "topbar"] as const;
 export type NavLayout = (typeof NAV_LAYOUTS)[number];
 export const DEFAULT_LAYOUT: NavLayout = "sidebar";
 
-/** The interface mode: the full interface, or the typography-only "Ultra-minimal" (zero-chrome) one. */
-export const UI_MODES = ["standard", "ultra-minimal"] as const;
+/**
+ * The interface mode: the full interface, or one of two typography-only looks that keep every feature: "Ultra-minimal" (zero chrome)
+ * and "LangKu" (editorial; same structure, its own ink, underlined text actions).
+ */
+export const UI_MODES = ["standard", "ultra-minimal", "langku"] as const;
 export type UiMode = (typeof UI_MODES)[number];
 export const DEFAULT_UI_MODE: UiMode = "standard";
+
+/** Both typography-only modes share one structure: text-only navigation, subject column, hairline lists, the Darkroom viewer. */
+export const isFlatUi = (mode: UiMode): boolean => mode !== "standard";
 
 export const APPEARANCE_KEYS = {
   uiMode: "vl:ui-mode",
