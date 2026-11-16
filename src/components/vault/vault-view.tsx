@@ -11,6 +11,7 @@ import { Modal } from "@/components/modal";
 import { AutosaveField, ProblemFields } from "@/components/problems/problem-fields";
 import { StoredImage } from "@/components/stored-image";
 import { ProblemBox, ProblemRow, ProblemRowHeader, ProblemTile } from "@/components/vault/problem-views";
+import { QuickCaptureButton } from "@/components/quick-capture";
 import { Button } from "@/components/ui/button";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import { useObjectUrl } from "@/components/use-object-url";
@@ -70,10 +71,13 @@ export function VaultView() {
           <h1 className="text-display">{t.vault.title}</h1>
           <p className="max-w-xl text-muted-foreground">{t.vault.subtitle}</p>
         </div>
-        <Button size="lg" onClick={() => setAdding(true)}>
-          <Plus />
-          {t.vault.add}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="lg" onClick={() => setAdding(true)}>
+            <Plus />
+            {t.vault.add}
+          </Button>
+          <QuickCaptureButton />
+        </div>
       </header>
 
       {/* Controls: sticky, so grouping and filters stay at hand while scrolling the grid. */}
@@ -233,6 +237,12 @@ function ProblemEditor({ card, onClose }: { card: MistakeCard; onClose: () => vo
           <Button variant="outline" aria-pressed={card.isHighYield} onClick={() => void actions.updateCard(card.id, { isHighYield: !card.isHighYield })} className={cn("h-9 w-full justify-start", card.isHighYield && "border-transparent bg-mark-soft text-mark-foreground hover:bg-mark-soft")}>
             <Flag />
             {card.isHighYield ? t.problem.unmarkPriority : t.problem.markPriority}
+          </Button>
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium">{t.problem.needsReview}</p>
+          <Button variant="outline" aria-pressed={card.needsReview} onClick={() => void actions.updateCard(card.id, { needsReview: !card.needsReview })} className={cn("h-9 w-full justify-start", card.needsReview && "border-warning bg-warning-soft text-warning hover:bg-warning-soft")}>
+            {t.problem.needsReviewToggle}
           </Button>
         </div>
       </div>

@@ -327,6 +327,7 @@ function ReviewCard({ card, subject, onPin, onGraded }: CardProps) {
           )}
           {topic && <span className="text-muted-foreground">· {topic.name}</span>}
           <Badge variant="secondary">{t.review.state[card.state]}</Badge>
+          {card.needsReview && <Badge variant="destructive">{t.problem.needsReview}</Badge>}
           {card.isHighYield && <Badge variant="outline">{t.review.highYield}</Badge>}
           <span className="tabular-nums ml-auto text-muted-foreground">{format(t.review.attemptNo, { n: nextAttempt })}</span>
         </div>

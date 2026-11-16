@@ -230,7 +230,7 @@ export function buildDemoSeed(now: Date = new Date()): SeedBundle {
         solutionLatex: seed.solutions[i % seed.solutions.length] ?? null,
         sourcePage: null, cropBox: null, figureBox: null, diagramImagePath: null, originalCropPath: null, ocrStatus: "MANUAL", ocrModel: null, ocrConfidence: null,
         ocrRawText: null, ahaNote: null,
-        isHighYield: rand() < 0.22, highYieldNote: null, state, due, stability, difficulty: state === "NEW" ? 0 : 3 + rand() * 6,
+        isHighYield: rand() < 0.22, needsReview: false, highYieldNote: null, state, due, stability, difficulty: state === "NEW" ? 0 : 3 + rand() * 6,
         elapsedDays: lastReviewDaysAgo ?? 0, scheduledDays: Math.round(stability), learningSteps: 0, reps, lapses: Math.floor(rand() * 3),
         lastReviewAt, attemptCount: attempts, isSuspended: false, archivedAt: null, createdAt, updatedAt: t,
       });

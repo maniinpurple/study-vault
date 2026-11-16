@@ -27,6 +27,18 @@ describe("buildReviewQueue", () => {
     expect(q.later.map((c) => c.id)).toEqual(["learning-later"]);
     expect(q.nextReadyAt?.toISOString()).toBe(minutes(70).toISOString());
   });
+  it("lists problems marked needs-review first, ahead of overdue and learning cards, within the chosen subject", () => {
+    const flagged = [
+      ...cards,
+      card("not-understood", { state: "NEW", due: T0, needsReview: true, createdAt: daysFrom(T0, -1) }),
+      card("not-understood-old", { state: "REVIEW", due: daysFrom(T0, -2), needsReview: true, stability: 5, lastReviewAt: daysFrom(T0, -9) }),
+      card("not-understood-elsewhere", { subjectId: "s2", state: "NEW", due: T0, needsReview: true }),
+    ];
+    const q = buildReviewQueue(flagged, T0, { utcOffsetMinutes: VN, subjectId: "s1" });
+    expect(q.ready.map((c) => c.id).slice(0, 2)).toEqual(["not-understood-old", "not-understood"]);
+    expect(q.ready.map((c) => c.id)).not.toContain("not-understood-elsewhere");
+    expect(q.ready.map((c) => c.id).slice(2)).toEqual(["learning-now", "overdue", "new", "learning-soon", "tonight"]);
+  });
   it("filters by subject and skips suspended / archived cards", () => {
     expect(buildReviewQueue(cards, T0, { utcOffsetMinutes: VN, subjectId: "s2" }).ready.map((c) => c.id)).toEqual(["other-subject"]);
     const all = buildReviewQueue(cards, T0, { utcOffsetMinutes: VN });

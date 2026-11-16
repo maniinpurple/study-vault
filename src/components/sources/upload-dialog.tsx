@@ -43,6 +43,8 @@ function UploadForm({ draft, defaultSubjectId, onClose }: { draft: UploadDraft; 
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const [title, setTitle] = React.useState(stripExtension(draft.name));
   const [subjectId, setSubjectId] = React.useState(subjects.find((s) => s.id === defaultSubjectId)?.id ?? subjects[0]?.id ?? "");
+  const [completed, setCompleted] = React.useState(false);
+  const [deadline, setDeadline] = React.useState("");
   const [suggestion, setSuggestion] = React.useState<string | null>(null);
   const [aiBusy, setAiBusy] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
@@ -104,6 +106,8 @@ function UploadForm({ draft, defaultSubjectId, onClose }: { draft: UploadDraft; 
       const created = await actions.createSource({
         title: title.trim() || stripExtension(draft.name),
         subjectId,
+        completed,
+        deadline: deadline || null,
         fileKind: source.kind,
         mimeType: files[0].type || (source.kind === "PDF" ? "application/pdf" : "image/jpeg"),
         fileSizeBytes: files.reduce((sum, f) => sum + f.size, 0),
@@ -142,6 +146,15 @@ function UploadForm({ draft, defaultSubjectId, onClose }: { draft: UploadDraft; 
           ))}
         </Select>
       </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={t.homework.deadline} htmlFor={`${id}-deadline`} hint={t.homework.deadlineHint}>
+          <Input id={`${id}-deadline`} type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+        </Field>
+        <label className="flex items-center gap-2.5 self-start pt-6 text-sm">
+          <input type="checkbox" checked={completed} onChange={(e) => setCompleted(e.target.checked)} className="size-4 accent-[var(--primary)]" />
+          {t.homework.done}
+        </label>
+      </div>
       {suggestion && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground" role="status">
           {format(t.sources.dialog.suggested, { name: suggestion })}

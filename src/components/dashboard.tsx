@@ -1,5 +1,6 @@
 "use client";
 
+import { QuickCaptureButton } from "@/components/quick-capture";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
@@ -61,6 +62,7 @@ export function Dashboard() {
           <Link href="/sources" className={buttonVariants({ variant: isEmpty ? "default" : "outline", size: "lg" })}>
             {t.dashboard.scan}
           </Link>
+          <QuickCaptureButton variant="outline" />
           {!isEmpty && (
             <Link href="/review" className={buttonVariants({ size: "lg" })}>
               {t.dashboard.review}

@@ -11,7 +11,7 @@ const onSelect = () => {};
 const box = (x: number) => ({ x, y: 0.1, w: 0.2, h: 0.2 });
 
 const props = (over: Partial<SourcePageProps> = {}): SourcePageProps => ({
-  doc, page: 1, scrollRoot, snips: [{ id: "a", number: 1, box: box(0.1) }], pending: [], toolbar, selectedId: null, snipMode: true, labels, onSnip, onSelect, ...over,
+  doc, page: 1, rotation: 0, scrollRoot, snips: [{ id: "a", number: 1, box: box(0.1) }], pending: [], toolbar, selectedId: null, snipMode: true, labels, onSnip, onSelect, ...over,
 });
 
 describe("SourcePage memo comparison", () => {
@@ -38,5 +38,6 @@ describe("SourcePage memo comparison", () => {
     expect(samePageProps(props(), props({ labels: { ...labels } }))).toBe(false);
     expect(samePageProps(props(), props({ onSnip: () => {} }))).toBe(false);
     expect(samePageProps(props(), props({ page: 2 }))).toBe(false);
+    expect(samePageProps(props(), props({ rotation: 1 }))).toBe(false);
   });
 });

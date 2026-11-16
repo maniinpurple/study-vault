@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { boxFromPoints, isUsableBox, toNormPoint, type NormBox, type Point } from "@/lib/scan-geometry";
+import { rotateCanvas, type Turns } from "@/lib/page-rotation";
 import type { ScanDocument } from "@/lib/scan-source";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,8 @@ export interface RegionToolbar {
 export interface SourcePageProps {
   doc: ScanDocument;
   page: number;
+  /** Quarter turns clockwise the page is shown at. Snips and pending regions arrive already in this orientation. */
+  rotation: Turns;
   /** The clipping viewport, used as the lazy-render root. */
   scrollRoot: React.RefObject<HTMLElement | null>;
   snips: PageSnip[];
@@ -82,11 +85,11 @@ export function samePageProps(a: SourcePageProps, b: SourcePageProps): boolean {
   const sameSelection = !(onPage(a) || onPage(b)) || a.selectedId === b.selectedId;
   return (
     sameSnips && samePending && sameSelection &&
-    a.doc === b.doc && a.page === b.page && a.scrollRoot === b.scrollRoot && a.toolbar === b.toolbar && a.snipMode === b.snipMode && a.labels === b.labels && a.onSnip === b.onSnip && a.onSelect === b.onSelect
+    a.doc === b.doc && a.page === b.page && a.rotation === b.rotation && a.scrollRoot === b.scrollRoot && a.toolbar === b.toolbar && a.snipMode === b.snipMode && a.labels === b.labels && a.onSnip === b.onSnip && a.onSelect === b.onSelect
   );
 }
 
-function SourcePageView({ doc, page, scrollRoot, snips, pending, toolbar, selectedId, snipMode, labels, onSnip, onSelect }: SourcePageProps) {
+function SourcePageView({ doc, page, rotation, scrollRoot, snips, pending, toolbar, selectedId, snipMode, labels, onSnip, onSelect }: SourcePageProps) {
   const frameRef = React.useRef<HTMLDivElement>(null);
   const holderRef = React.useRef<HTMLDivElement>(null);
   const [near, setNear] = React.useState(false);
@@ -114,8 +117,10 @@ function SourcePageView({ doc, page, scrollRoot, snips, pending, toolbar, select
     let cancelled = false;
     doc
       .pageCanvas(page, "original")
-      .then((canvas) => {
+      .then((raw) => {
         if (cancelled) return;
+        // Rotation happens in memory, on a canvas of its own: the picture and the pointer coordinates stay in the same space.
+        const canvas = rotateCanvas(raw, rotation);
         canvas.style.width = "100%";
         canvas.style.height = "100%";
         canvas.style.display = "block";
@@ -128,7 +133,7 @@ function SourcePageView({ doc, page, scrollRoot, snips, pending, toolbar, select
       cancelled = true;
       holder.replaceChildren();
     };
-  }, [doc, near, page]);
+  }, [doc, near, page, rotation]);
 
   React.useEffect(() => {
     latest.current = { snipMode, status };

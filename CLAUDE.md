@@ -160,6 +160,16 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
   wheel delta in smooth mode, so it is kept tiny (0.004). These values were tuned by feel on a real trackpad — **do not "calibrate"
   them** (a custom eased zoom engine was tried and rejected). Zoom state is written straight to the DOM (`--zoom`, the % label),
   never to React state. Mouse/touch dragging pans only in the Scroll tool. A "?" popover (`help-tip.tsx`) explains the controls.
+- **Rotate** ("Xoay ảnh", toolbar): turns the page in view 90° clockwise by drawing it into an off-screen canvas (`rotateCanvas`, `src/lib/page-rotation.ts`) — **never a CSS
+  transform**, which would split the picture and the pointer coordinates. Snips are always stored in the page's ORIGINAL orientation; the viewer shows them with `rotateBox` and a newly drawn
+  box is `unrotateBox`ed before saving (pending regions turn with their page). Rotation is per device in localStorage (`vl:rotation:<sourceId>`); no data or file changes. Photos are decoded with
+  `imageOrientation: "from-image"` (EXIF respected, with a fallback for browsers that already do it by default).
+- **Pan key**: Shift or Space (`src/lib/pan-key.ts`, `use-pan-key.ts`) switches between cropping and dragging the document: cursor `grab`, `snipMode` false so no crop box starts. Setting `vl:pan-key`
+  = `hold` (default, only while held) or `toggle` (press to enter, press again to leave), in Settings → Controls. Typing fields keep both keys; buttons and links keep Space.
+- The drag rectangle lives in refs/DOM (never React state) — keep it that way; `SourcePage` is `React.memo`d with `samePageProps`, so every prop must stay stable (`rotation` included).
+- **Homework tracker** (Sources library): `ExamUpload.completed` (default false) and `ExamUpload.deadline` (`DATE`, exposed as `YYYY-MM-DD`), editable in the upload dialog and in place on every card/row
+  (`homework-controls.tsx`, optimistic). `src/lib/homework.ts` (pure, tested): the sort dropdown (`vl:sources-sort`: deadline (default) | uploaded | name) — closest deadline first, unfinished before
+  finished, **sources without a deadline always last** (newest first) — and the overdue / today / days-left state against the student's own calendar day.
 - Each tray card keeps **image + error tags + solution + takeaway together** and autosaves (`ProblemFields`).
 - "Convert to text" is optional and per card: the vision model (user's key, `/api/ai/ocr`) rewrites the crop into clean
   Markdown+LaTeX without handwritten marks. A problem therefore has text, an image, or both; UI that needs text
@@ -181,6 +191,9 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
   resetting on any search/sort/filter/view change; page sizes in `lib/vault.ts`). Images use `next/image` via `StoredImage` — lazy by default
   and **`unoptimized` on purpose**: Next's optimizer fetches without the user's session and caches for everyone, so private files are served
   as-is and cached by the browser (`/api/files` sends an immutable private header). Use `fill` + a `relative` parent for thumbnails.
+- **Quick capture** ("Ghi nhanh bài", `quick-capture.tsx`, on /vault and the Overview): a modal that saves a standalone text/LaTeX problem (subject, statement with live KaTeX preview, optional class
+  solution) with `MistakeCard.needsReview` (default checked in this flow). `needsReview` cards show a warning badge in every vault view and the review card, have a toggle in the vault editor, are
+  **sorted first in the review queue** (`buildReviewQueue`), and the flag clears itself when the card is answered GOOD or EASY.
 - Three views — Grid, List, Detailed (`problem-views.tsx`) — chosen with the shared `ViewToggle` and remembered per device in
   `localStorage` (`useStoredChoice`, key `vl:vault-view`). The Sources library has the same toggle (`vl:sources-view`).
 - `src/lib/vault.ts` (pure, tested) filters (subject, search ignoring diacritics, priority, review status), sorts and
@@ -208,9 +221,12 @@ A user can have a Vietnamese UI and English AI output for an English-medium subj
   attempt log, reflection note and error tags only after "Show answer". "New numbers" (`/api/ai/mutate`, light tier) is
   the only AI call in review and needs question text.
 
-- **Scratchpad** (`src/components/scratchpad.tsx`, `react-rnd` + `react-sketch-canvas`): mounted once in `AppShell`, so it is on every page.
-  A round button (bottom-right) opens a Quick-Note-style window: drag by the header, resize from any edge, pen colors black / red /
-  yellow highlighter, eraser, undo, clear, and four CSS paper patterns (ivory, dots, lined, grid). The overlay layer is
+- **Floating tools** (`floating-tools.tsx`, mounted once in `AppShell`, so on every page): a Samsung-Notes-style speed-dial button (bottom-right) that pops up **Bảng nháp** (Scratchpad) and **Gõ công thức**
+  (Math Pad) above it; each opens its own draggable window and both can be open together. **Scratchpad** (`scratchpad.tsx`, `react-rnd` + `react-sketch-canvas`): drag by the header, resize from any
+  edge, pen colors black / red / yellow highlighter, eraser, **text tool** (click the paper, type, Enter), undo (takes back the last stroke or note), clear, and four CSS paper patterns (ivory, dots, lined, grid).
+  **Math Pad** (`math-pad.tsx`, templates and splicing in `src/lib/math-insert.ts`): quick-insert buttons (fractions, roots, powers, integrals, sums, limits, matrices, relations, Greek), a LaTeX box with
+  instant KaTeX preview, "Chèn vào ô đang gõ" (inserts `$…$` / `$$…$$` into the last focused text field via the native setter + `input` event, so controlled React fields keep it) and "Sao chép LaTeX".
+  Note: native `<dialog>` modals make the rest of the page inert, so the pads cannot be used while a modal is open. The overlay layer is
   `pointer-events-none`, so only the window and button take clicks. Purely temporary — never stored; paper/ink colors are fixed
   (not themed), like exam pages.
 

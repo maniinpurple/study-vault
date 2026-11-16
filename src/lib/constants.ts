@@ -187,6 +187,8 @@ export const STORAGE_KEYS = {
   sidebar: "vl:sidebar",
   vaultView: "vl:vault-view",
   sourcesView: "vl:sources-view",
+  sourcesSort: "vl:sources-sort",
+  panKey: "vl:pan-key",
 } as const;
 
 export function slugify(input: string): string {

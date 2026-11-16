@@ -5,10 +5,12 @@ import type * as React from "react";
 
 import { useVault } from "@/components/app-provider";
 import { useAppearance } from "@/components/use-appearance";
+import { useStoredChoice } from "@/components/use-stored-choice";
 import { ApiVault } from "@/components/api-vault";
 import { Field, Select } from "@/components/ui/field";
 import { ACCENT_PRESETS, NAV_LAYOUTS, THEME_STYLES, normalizeHex, type ThemeStyle } from "@/lib/appearance";
-import { LANGUAGES, THEME_ATTRIBUTE, THEME_CHOICES, type Language } from "@/lib/constants";
+import { LANGUAGES, STORAGE_KEYS, THEME_ATTRIBUTE, THEME_CHOICES, type Language } from "@/lib/constants";
+import { DEFAULT_PAN_KEY_MODE, PAN_KEY_MODES } from "@/lib/pan-key";
 import { spring } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -128,6 +130,7 @@ export function SettingsView() {
   const mode = THEME_ATTRIBUTE[user.theme];
   const theme = THEME_CHOICES.find((choice) => choice.mode === mode) ?? THEME_CHOICES[0];
   const { style, setStyle, accent, setAccent, layout, setLayout } = useAppearance();
+  const [panKey, setPanKey] = useStoredChoice(STORAGE_KEYS.panKey, PAN_KEY_MODES, DEFAULT_PAN_KEY_MODE);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -163,6 +166,16 @@ export function SettingsView() {
         <div className="space-y-2">
           <p className="text-sm font-medium">{t.header.language}</p>
           <Segmented id="language" label={t.header.language} value={user.uiLanguage} options={LANGUAGES.map((language) => ({ value: language, label: t.language[language] }))} onChange={(value) => void actions.setUiLanguage(value)} />
+        </div>
+        <p className="text-caption text-subtle">{t.appearance.deviceNote}</p>
+      </Section>
+
+      <Section title={t.controls.title} hint={t.controls.hint}>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">{t.controls.panKey}</p>
+          <p className="text-caption text-muted-foreground">{t.controls.panKeyHint}</p>
+          <Segmented id="pan-key" label={t.controls.panKey} value={panKey} options={PAN_KEY_MODES.map((mode) => ({ value: mode, label: t.controls[mode] }))} onChange={setPanKey} />
+          <p className="text-caption text-muted-foreground">{panKey === "hold" ? t.controls.holdHint : t.controls.toggleHint}</p>
         </div>
         <p className="text-caption text-subtle">{t.appearance.deviceNote}</p>
       </Section>

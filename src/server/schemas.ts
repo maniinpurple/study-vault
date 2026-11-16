@@ -60,12 +60,23 @@ export const apiKeyPatchSchema = z.object({
   lastErrorMessage: optionalText(300),
 });
 
-export const uploadPatchSchema = z.object({ title: z.string().trim().min(1).max(120).optional(), sourceLabel: optionalText(160), subjectId: optionalId });
+/** A calendar day, `YYYY-MM-DD`. */
+const calendarDay = z.iso.date();
+
+export const uploadPatchSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  sourceLabel: optionalText(160),
+  subjectId: optionalId,
+  completed: z.boolean().optional(),
+  deadline: calendarDay.nullable().optional(),
+});
 
 /** Metadata of an uploaded source (the files travel next to it as multipart parts). */
 export const newUploadMetaSchema = z.object({
   title: z.string().trim().min(1).max(120),
   subjectId: optionalId,
+  completed: z.boolean().optional(),
+  deadline: calendarDay.nullable().optional(),
   fileKind: z.enum(FILE_KINDS),
   pageCount: z.number().int().min(1).max(SCAN_LIMITS.maxPdfPages).nullable(),
 });
@@ -84,6 +95,7 @@ export const newProblemMetaSchema = z.object({
   ahaNote: optionalText(4000),
   highYieldNote: optionalText(4000),
   isHighYield: z.boolean().optional(),
+  needsReview: z.boolean().optional(),
   tagIds: z.array(idSchema).max(40).optional(),
   sourcePage: z.number().int().min(1).max(SCAN_LIMITS.maxPdfPages).nullable().optional(),
   cropBox: cropBox.nullable().optional(),
@@ -97,6 +109,7 @@ export const cardPatchSchema = z.object({
   ahaNote: optionalText(4000),
   highYieldNote: optionalText(4000),
   isHighYield: z.boolean().optional(),
+  needsReview: z.boolean().optional(),
   topicId: optionalId,
   isSuspended: z.boolean().optional(),
   ocrStatus: z.enum(OCR_STATUSES).optional(),

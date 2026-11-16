@@ -78,7 +78,8 @@ export interface ReviewQueue {
 /**
  * Today's queue. NEW/REVIEW cards are ready when due before the end of the local day (overdue included);
  * (re)learning cards only once due within the learn-ahead window, because their steps are minutes long.
- * Order: due (re)learning steps first (they are time-sensitive), then by due date, high-yield first on ties.
+ * Order: problems marked "needs review" (not understood in class) first, then due (re)learning steps (they are time-sensitive),
+ * then by due date, high-yield first on ties.
  */
 export function buildReviewQueue(
   cards: readonly MistakeCard[],
@@ -99,6 +100,7 @@ export function buildReviewQueue(
   }
   ready.sort(
     (a, b) =>
+      Number(b.needsReview) - Number(a.needsReview) ||
       Number(isLearning(b) && b.due.getTime() <= now.getTime()) - Number(isLearning(a) && a.due.getTime() <= now.getTime()) ||
       a.due.getTime() - b.due.getTime() ||
       Number(b.isHighYield) - Number(a.isHighYield) ||

@@ -3,7 +3,7 @@
  * is a pure function of the snapshot and touches only what the real action would change, so unchanged objects keep their identity
  * (and memoized components skip the render). The server's own snapshot replaces the result when it arrives.
  */
-import type { CardPatch, MistakeCardTag, UserPatch, UserSnapshot } from "@/lib/repo/types";
+import type { CardPatch, MistakeCardTag, UploadPatch, UserPatch, UserSnapshot } from "@/lib/repo/types";
 
 /** A patch without its `undefined` values, which must not overwrite stored ones. */
 function defined<T extends object>(patch: T): Partial<T> {
@@ -14,6 +14,12 @@ export function patchCard(snapshot: UserSnapshot, cardId: string, patch: CardPat
   if (!snapshot.cards.some((card) => card.id === cardId)) return snapshot;
   const changes = defined(patch);
   return { ...snapshot, cards: snapshot.cards.map((card) => (card.id === cardId ? { ...card, ...changes } : card)) };
+}
+
+export function patchUpload(snapshot: UserSnapshot, uploadId: string, patch: UploadPatch): UserSnapshot {
+  if (!snapshot.examUploads.some((upload) => upload.id === uploadId)) return snapshot;
+  const changes = defined(patch);
+  return { ...snapshot, examUploads: snapshot.examUploads.map((upload) => (upload.id === uploadId ? { ...upload, ...changes } : upload)) };
 }
 
 export function patchUser(snapshot: UserSnapshot, patch: UserPatch): UserSnapshot {

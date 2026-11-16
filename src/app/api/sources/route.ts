@@ -45,6 +45,8 @@ export async function POST(request: Request) {
     const upload = await getRepository().createUpload(userId, {
       title: meta.data.title,
       subjectId: meta.data.subjectId,
+      completed: meta.data.completed,
+      deadline: meta.data.deadline,
       fileKind: meta.data.fileKind,
       mimeType: files[0].type,
       fileSizeBytes: totalBytes,

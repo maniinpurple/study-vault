@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, Hand, Minus, PanelRight, Plus, Scissors } from "lucide-react";
+import { ChevronLeft, Hand, Minus, PanelRight, Plus, RotateCw, Scissors } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 import { TransformComponent, TransformWrapper, type ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
@@ -10,10 +10,15 @@ import { useVault } from "@/components/app-provider";
 import { Modal } from "@/components/modal";
 import { HelpTip } from "@/components/sources/help-tip";
 import { SnipCard } from "@/components/sources/snip-card";
+import { usePanKey } from "@/components/use-pan-key";
+import { useStoredChoice } from "@/components/use-stored-choice";
 import { SourcePage, type PageSnip, type PendingRegion, type RegionToolbar } from "@/components/sources/source-page";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/field";
+import { STORAGE_KEYS } from "@/lib/constants";
 import { format } from "@/lib/i18n";
+import { DEFAULT_PAN_KEY_MODE, PAN_KEY_MODES } from "@/lib/pan-key";
+import { normalizeTurns, parseRotations, rotatedPage, rotateBox, rotateCanvas, rotationStorageKey, serializeRotations, unrotateBox, type PageRotations } from "@/lib/page-rotation";
 import { spring } from "@/lib/motion";
 import { pickAiKey } from "@/lib/ai-keys";
 import { cropRegions, orderSnips } from "@/lib/problems";
@@ -87,6 +92,17 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [title, setTitle] = React.useState(upload?.title ?? "");
+  const [rotations, setRotations] = React.useState<PageRotations>(() => {
+    try {
+      return parseRotations(localStorage.getItem(rotationStorageKey(sourceId)));
+    } catch {
+      return {};
+    }
+  });
+  // Pan key: Shift or Space (hold or toggle, per Settings). While it is on, dragging pans instead of drawing a crop box.
+  const [panKeyMode] = useStoredChoice(STORAGE_KEYS.panKey, PAN_KEY_MODES, DEFAULT_PAN_KEY_MODE);
+  const panKeyOn = usePanKey(panKeyMode, true);
+  const cropping = snipMode && !panKeyOn;
   const viewerRef = React.useRef<HTMLDivElement>(null);
   const trayRef = React.useRef<HTMLDivElement>(null);
   const zoomLabelRef = React.useRef<HTMLSpanElement>(null);
@@ -104,9 +120,9 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
    * The values the stable callbacks below need. They are passed to memoized children (the pages and the tray cards), so they must
    * keep one identity for the life of the workspace; reading the current state from here, instead of closing over it, lets them.
    */
-  const live = React.useRef({ pending, ordered, newest, doc, upload, subjectId, t, actions });
+  const live = React.useRef({ pending, ordered, newest, doc, upload, subjectId, t, actions, rotations });
   React.useEffect(() => {
-    live.current = { pending, ordered, newest, doc, upload, subjectId, t, actions };
+    live.current = { pending, ordered, newest, doc, upload, subjectId, t, actions, rotations };
   });
 
   // Escape abandons a stitch in progress.
@@ -135,14 +151,16 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
 
   /** Crop, upload and show a problem built from one or more regions of the document. */
   const saveRegions = React.useCallback(async (regions: CropRegion[], from: DOMRect) => {
-    const { doc, upload, subjectId, t, actions } = live.current;
+    const { doc, upload, subjectId, t, actions, rotations } = live.current;
     if (!doc || !upload) return;
     if (!subjectId) return setError(t.sources.needSubject);
     setError(null);
     try {
-      const crops = await Promise.all(regions.map(async (r) => cropCanvas(await doc.pageCanvas(r.page, "original"), r)));
+      // Regions are in the orientation on screen: crop them from the rotated page, so the saved image is upright …
+      const crops = await Promise.all(regions.map(async (r) => cropCanvas(rotateCanvas(await doc.pageCanvas(r.page, "original"), rotations[r.page] ?? 0), r)));
       const blob = await canvasToBlob(crops.length === 1 ? crops[0] : stitchCanvases(crops), "image/jpeg", 0.92);
-      const [first, ...more] = regions.map(({ page, x, y, w, h }) => ({ page, x, y, w, h }));
+      // … but store them on the original page, which is what a snip's cropBox always refers to.
+      const [first, ...more] = regions.map(({ page, x, y, w, h }) => ({ page, ...unrotateBox({ x, y, w, h }, rotations[page] ?? 0) }));
       const card = await actions.createProblem({
         subjectId, examUploadId: upload.id, questionLatex: "", sourcePage: first.page, cropBox: more.length > 0 ? { ...first, more } : first, originalCrop: blob,
       });
@@ -193,6 +211,39 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
     void zoom.setTransform(positionX, -top * current + 8, current, 300, "easeOut");
   }, []);
 
+  /** The page in the middle of the viewer, which is the one "Xoay ảnh" turns. */
+  const currentPage = React.useCallback((): number => {
+    const viewer = viewerRef.current;
+    if (!viewer) return 1;
+    const middle = viewer.getBoundingClientRect();
+    const target = middle.top + middle.height / 2;
+    let best = 1;
+    let bestDistance = Infinity;
+    viewer.querySelectorAll<HTMLElement>("[data-page]").forEach((frame) => {
+      const r = frame.getBoundingClientRect();
+      const distance = target < r.top ? r.top - target : target > r.bottom ? target - r.bottom : 0;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = Number(frame.dataset.page);
+      }
+    });
+    return best;
+  }, []);
+
+  /** Turn the page in view a quarter clockwise. Pending regions on it turn with it; saved snips are stored upright and just follow. */
+  const rotateCurrentPage = React.useCallback(() => {
+    const page = currentPage();
+    const next = rotatedPage(live.current.rotations, page);
+    setRotations(next);
+    setPending((prev) => prev.map((r) => (r.page === page ? { ...r, ...rotateBox(r, 1) } : r)));
+    try {
+      if (Object.keys(next).length === 0) localStorage.removeItem(rotationStorageKey(sourceId));
+      else localStorage.setItem(rotationStorageKey(sourceId), serializeRotations(next));
+    } catch {
+      /* storage unavailable: the rotation lasts until the page is closed */
+    }
+  }, [currentPage, sourceId]);
+
   const selectFromPage = React.useCallback((id: string) => {
     setSelectedId(id);
     setTrayOpen(true);
@@ -226,10 +277,11 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
   const snipsByPage = React.useMemo(() => {
     const byPage = new Map<number, PageSnip[]>();
     snips.forEach((card, i) => {
-      for (const r of cropRegions(card)) byPage.set(r.page, [...(byPage.get(r.page) ?? []), { id: card.id, number: i + 1, box: { x: r.x, y: r.y, w: r.w, h: r.h } }]);
+      // Stored upright; shown at the page's current rotation.
+      for (const r of cropRegions(card)) byPage.set(r.page, [...(byPage.get(r.page) ?? []), { id: card.id, number: i + 1, box: rotateBox({ x: r.x, y: r.y, w: r.w, h: r.h }, rotations[r.page] ?? 0) }]);
     });
     return byPage;
-  }, [snips]);
+  }, [snips, rotations]);
   const pendingByPage = React.useMemo(() => {
     const byPage = new Map<number, PendingRegion[]>();
     ordered.forEach((r, i) => byPage.set(r.page, [...(byPage.get(r.page) ?? []), { key: r.key, number: i + 1, box: { x: r.x, y: r.y, w: r.w, h: r.h }, newest: r.key === newest?.key }]));
@@ -287,6 +339,10 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
               </button>
             ))}
           </div>
+          <Button variant="outline" size="sm" onClick={rotateCurrentPage} title={t.sources.tools.rotateHint} className="gap-1.5">
+            <RotateCw />
+            {t.sources.tools.rotate}
+          </Button>
           <HelpTip />
           <div className="flex items-center gap-1" role="group" aria-label={t.sources.tools.zoomIn}>
             <Button variant="outline" size="icon-sm" onClick={() => void zoomRef.current?.zoomOut(0.25, 200)} aria-label={t.sources.tools.zoomOut}>
@@ -313,9 +369,17 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
         {/* Document: pinch (or ctrl + wheel) zooms, two-finger scroll pans; dragging pans only in the Scroll tool. */}
         <div className={cn("relative flex min-w-0 flex-1 flex-col bg-sunken", trayOpen && "hidden lg:flex")}>
           <p className="z-10 shrink-0 border-b border-border bg-sunken px-4 py-1.5 text-caption text-muted-foreground" role={error ? "alert" : undefined}>
-            {error ? <span className="text-destructive">{error}</span> : snipMode ? t.sources.tools.snipHint : t.sources.tools.panHint}
+            {error ? (
+              <span className="text-destructive">{error}</span>
+            ) : panKeyOn ? (
+              (panKeyMode === "hold" ? t.sources.tools.panHeld : t.sources.tools.panToggled)
+            ) : snipMode ? (
+              `${t.sources.tools.snipHint} ${panKeyMode === "hold" ? t.sources.tools.panKeyHold : t.sources.tools.panKeyToggle}`
+            ) : (
+              t.sources.tools.panHint
+            )}
           </p>
-          <div ref={viewerRef} style={{ "--zoom": 1 } as React.CSSProperties} className="relative min-h-0 flex-1 overflow-hidden overscroll-contain">
+          <div ref={viewerRef} style={{ "--zoom": 1 } as React.CSSProperties} className={cn("relative min-h-0 flex-1 overflow-hidden overscroll-contain", !cropping && "cursor-grab active:cursor-grabbing")}>
             {failed ? (
               <p role="alert" className="p-10 text-center text-sm text-destructive">
                 {t.sources.fileMissing}
@@ -338,7 +402,7 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
                 wheel={{ wheelDisabled: true, step: 0.004 }}
                 pinch={{ step: 5 }}
                 trackPadPanning={{ disabled: false, velocityDisabled: true }}
-                panning={{ disabled: snipMode, velocityDisabled: false }}
+                panning={{ disabled: cropping, velocityDisabled: false }}
                 doubleClick={{ disabled: true }}
                 onTransform={(ref) => {
                   // Straight to the DOM: this fires every frame while zooming, and must not re-render the pages.
@@ -354,12 +418,13 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
                         <SourcePage
                           doc={doc}
                           page={page}
+                          rotation={normalizeTurns(rotations[page] ?? 0)}
                           scrollRoot={viewerRef}
                           snips={snipsByPage.get(page) ?? NO_SNIPS}
                           pending={pendingByPage.get(page) ?? NO_PENDING}
                           toolbar={toolbar}
                           selectedId={selectedId}
-                          snipMode={snipMode}
+                          snipMode={cropping}
                           labels={pageLabels}
                           onSnip={onRegion}
                           onSelect={selectFromPage}

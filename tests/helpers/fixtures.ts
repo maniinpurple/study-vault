@@ -9,7 +9,7 @@ export function card(id: string, patch: Partial<MistakeCard> = {}): MistakeCard 
   return {
     id, userId: "u1", subjectId: "s1", topicId: null, examUploadId: null, title: null, questionLatex: `Question ${id}: $x^2 = 4$`, userAnswerLatex: null,
     correctAnswerLatex: null, solutionLatex: null, sourcePage: null, cropBox: null, figureBox: null, diagramImagePath: null, originalCropPath: null, ocrStatus: "MANUAL",
-    ocrModel: null, ocrConfidence: null, ocrRawText: null, ahaNote: null, isHighYield: false, highYieldNote: null, state: "NEW", due: T0, stability: 0, difficulty: 0,
+    ocrModel: null, ocrConfidence: null, ocrRawText: null, ahaNote: null, isHighYield: false, needsReview: false, highYieldNote: null, state: "NEW", due: T0, stability: 0, difficulty: 0,
     elapsedDays: 0, scheduledDays: 0, learningSteps: 0, reps: 0, lapses: 0, lastReviewAt: null, attemptCount: 0, isSuspended: false, archivedAt: null,
     createdAt: daysFrom(T0, -30), updatedAt: T0, ...patch,
   };

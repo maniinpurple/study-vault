@@ -10,7 +10,7 @@ import { AccountMenu } from "@/components/account-menu";
 import { useApp } from "@/components/app-provider";
 import { Dropdown, MenuItem } from "@/components/dropdown";
 import { LanguageSwitcher } from "@/components/language-switcher";
-import { Scratchpad } from "@/components/scratchpad";
+import { FloatingTools } from "@/components/floating-tools";
 import { SubjectDialog } from "@/components/subject-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Button } from "@/components/ui/button";
@@ -336,8 +336,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </AnimatePresence>
       </div>
-      {/* Global: one scratchpad for every page, so a drawing survives navigation. */}
-      <Scratchpad />
+      {/* Global: the speed-dial button, Scratchpad and Math Pad for every page, so a drawing survives navigation. */}
+      <FloatingTools />
     </MotionConfig>
   );
 }

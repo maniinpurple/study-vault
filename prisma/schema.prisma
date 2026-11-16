@@ -416,6 +416,10 @@ model ExamUpload {
   status           UploadStatus @default(UPLOADED)
   errorMessage     String?      @map("error_message")
   examDate         DateTime?    @map("exam_date")
+  /// Homework tracker: the student has finished this source ("Đã hoàn thành") …
+  completed        Boolean      @default(false)
+  /// … and when it is due ("Hạn nộp"). A calendar date, stored as DATE (no time zone): the day the student typed.
+  deadline         DateTime?    @db.Date
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
 
@@ -467,6 +471,9 @@ model MistakeCard {
 
   /// "Teacher's Favorite / High-Yield" flag — prioritised by Exam Prep & the synthesizer.
   isHighYield   Boolean @default(false) @map("is_high_yield")
+  /// "Chưa hiểu rõ · Cần xem lại": captured in class but not understood. Listed first in the review queue until it is
+  /// answered well (GOOD / EASY) or the student clears it.
+  needsReview   Boolean @default(false) @map("needs_review")
   /// Teacher meta-note (what the teacher stressed). May be set without the high-yield flag. Optional.
   highYieldNote String? @map("high_yield_note")
 

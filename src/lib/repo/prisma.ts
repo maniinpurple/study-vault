@@ -38,6 +38,8 @@ const API_KEY_SELECT = {
   isActive: true, lastUsedAt: true, lastValidatedAt: true, lastErrorMessage: true, createdAt: true, updatedAt: true,
 } satisfies Prisma.UserApiKeySelect;
 
+/** `YYYY-MM-DD` → the DATE column's value (UTC midnight of that day, so no time zone can shift it). */
+const dayToDate = (day: string | null | undefined) => (day == null ? day : new Date(`${day}T00:00:00.000Z`));
 const jsonOrNull = (value: unknown) => (value == null ? Prisma.DbNull : (value as Prisma.InputJsonValue));
 
 const toSubject = (row: DbSubject): Subject => ({ ...row, memoryInsights: row.memoryInsights as unknown as SubjectMemoryInsights | null });
@@ -48,8 +50,8 @@ const toPersona = (row: DbPersona): UserAiPersona => ({
   preferences: row.preferences as unknown as PersonaPreferences | null,
 });
 function toUpload(row: DbUpload): ExamUpload {
-  const { id, userId, subjectId, title, sourceLabel, fileKind, mimeType, storageBucket, storagePath, pageStoragePaths, fileSizeBytes, pageCount, sha256, createdAt, updatedAt } = row;
-  return { id, userId, subjectId, title, sourceLabel, fileKind, mimeType, storageBucket, storagePath, pageStoragePaths, fileSizeBytes, pageCount, sha256, createdAt, updatedAt };
+  const { id, userId, subjectId, title, sourceLabel, fileKind, mimeType, storageBucket, storagePath, pageStoragePaths, fileSizeBytes, pageCount, sha256, completed, createdAt, updatedAt } = row;
+  return { id, userId, subjectId, title, sourceLabel, fileKind, mimeType, storageBucket, storagePath, pageStoragePaths, fileSizeBytes, pageCount, sha256, completed, deadline: row.deadline ? row.deadline.toISOString().slice(0, 10) : null, createdAt, updatedAt };
 }
 function toLog(row: DbAttemptLog): CardAttemptLog {
   const { userAnswerLatex: _unused, ...log } = row;
@@ -326,7 +328,7 @@ export class PrismaRepository implements Repository {
     const [upload] = await this.db.$transaction([
       this.db.examUpload.create({
         data: {
-          id, userId, subjectId, title: input.title.trim() || "untitled", sourceLabel: trimOrNull(input.sourceLabel), fileKind, mimeType: input.mimeType, storagePath: paths[0],
+          id, userId, subjectId, title: input.title.trim() || "untitled", sourceLabel: trimOrNull(input.sourceLabel), completed: input.completed ?? false, deadline: dayToDate(input.deadline) ?? null, fileKind, mimeType: input.mimeType, storagePath: paths[0],
           pageStoragePaths: fileKind === "IMAGE" ? paths : [], fileSizeBytes: input.fileSizeBytes, pageCount: input.pageCount, sha256: input.sha256, status: "READY",
         },
       }),
@@ -340,7 +342,7 @@ export class PrismaRepository implements Repository {
     const row = await owned("ExamUpload", id, () =>
       this.db.examUpload.update({
         where: { id, userId },
-        data: { title: patch.title?.trim() || undefined, sourceLabel: patch.sourceLabel === undefined ? undefined : trimOrNull(patch.sourceLabel), subjectId: patch.subjectId },
+        data: { title: patch.title?.trim() || undefined, sourceLabel: patch.sourceLabel === undefined ? undefined : trimOrNull(patch.sourceLabel), subjectId: patch.subjectId, completed: patch.completed, deadline: dayToDate(patch.deadline) },
       }),
     );
     return toUpload(row);
@@ -382,7 +384,7 @@ export class PrismaRepository implements Repository {
           id, userId, subjectId, topicId, examUploadId, title: trimOrNull(input.title), questionLatex: input.questionLatex.trim(), solutionLatex: trimOrNull(input.solutionLatex),
           sourcePage: input.sourcePage ?? null, cropBox: jsonOrNull(input.cropBox), figureBox: jsonOrNull(input.figureBox), diagramImagePath, originalCropPath,
           ocrStatus: input.ocrStatus ?? "MANUAL", ocrModel: input.ocrModel ?? null, ocrConfidence: input.ocrConfidence ?? null, ocrRawText: input.ocrRawText ?? null,
-          ahaNote: trimOrNull(input.ahaNote), isHighYield: input.isHighYield ?? false, highYieldNote: trimOrNull(input.highYieldNote),
+          ahaNote: trimOrNull(input.ahaNote), isHighYield: input.isHighYield ?? false, needsReview: input.needsReview ?? false, highYieldNote: trimOrNull(input.highYieldNote),
         },
       });
       if (files.length > 0) await tx.storedFile.createMany({ data: files });
@@ -437,7 +439,11 @@ export class PrismaRepository implements Repository {
       });
       const next = await tx.mistakeCard.update({
         where: { id: card.id, userId },
-        data: { ...scheduled, elapsedDays: Math.round(scheduled.elapsedDays), scheduledDays: Math.round(scheduled.scheduledDays), attemptCount: attemptNumber },
+        data: {
+          ...scheduled, elapsedDays: Math.round(scheduled.elapsedDays), scheduledDays: Math.round(scheduled.scheduledDays), attemptCount: attemptNumber,
+          // A "needs review" problem is understood once it is answered well; Again / Hard keep it at the top.
+          needsReview: input.rating === "GOOD" || input.rating === "EASY" ? false : row.needsReview,
+        },
       });
       await tx.subject.updateMany({ where: { id: card.subjectId, userId, memoryStale: false }, data: { memoryStale: true } });
       return { card: toCard(next), log: toLog(log) };
@@ -456,7 +462,7 @@ export class PrismaRepository implements Repository {
       this.db.mistakeCard.update({
         where: { id, userId },
         data: {
-          title: text(patch.title), questionLatex, solutionLatex: text(patch.solutionLatex), ahaNote: text(patch.ahaNote), highYieldNote: text(patch.highYieldNote), isHighYield: patch.isHighYield,
+          title: text(patch.title), questionLatex, solutionLatex: text(patch.solutionLatex), ahaNote: text(patch.ahaNote), highYieldNote: text(patch.highYieldNote), isHighYield: patch.isHighYield, needsReview: patch.needsReview,
           topicId: patch.topicId, isSuspended: patch.isSuspended, ocrStatus: patch.ocrStatus, ocrModel: patch.ocrModel, ocrConfidence: patch.ocrConfidence, ocrRawText: patch.ocrRawText,
         },
       }),

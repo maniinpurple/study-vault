@@ -1,16 +1,17 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { Eraser, Pencil, Type } from "lucide-react";
 import * as React from "react";
 import { Rnd } from "react-rnd";
 import { ReactSketchCanvas, type ReactSketchCanvasRef } from "react-sketch-canvas";
 
-import { useApp } from "@/components/app-provider";
+import { useI18n } from "@/components/app-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type Paper = "plain" | "dots" | "lined" | "grid";
 type PenName = "black" | "red" | "yellow";
+type Tool = "pen" | "eraser" | "text";
 
 const PAPERS: readonly Paper[] = ["plain", "dots", "lined", "grid"];
 
@@ -24,6 +25,8 @@ const PENS: Record<PenName, { color: string; width: number }> = {
   red: { color: "oklch(0.58 0.2 27)", width: 2.5 },
   yellow: { color: "oklch(0.87 0.17 95 / 0.6)", width: 12 },
 };
+/** Typed text is never the translucent highlighter: yellow text would be unreadable on the paper. */
+const TEXT_COLORS: Record<PenName, string> = { black: PENS.black.color, red: PENS.red.color, yellow: PENS.black.color };
 const ERASER_WIDTH = 22;
 const MIN_SIZE = { width: 300, height: 280 };
 
@@ -50,7 +53,7 @@ interface Rect {
   height: number;
 }
 
-/** First placement: bottom-right, just above the trigger, and never larger than the screen. */
+/** First placement: bottom-right, just above the speed-dial button, and never larger than the screen. */
 function initialRect(): Rect {
   const width = Math.min(440, window.innerWidth - 32);
   const height = Math.min(480, window.innerHeight - 120);
@@ -66,44 +69,82 @@ function Grip() {
   );
 }
 
+interface TextNote {
+  id: number;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+}
+
 /**
- * Scratchpad, in the style of Quick Note: a round button at the bottom-right opens a floating window you can drag by its
- * header and resize from any edge. It draws on a paper of your choice, in black, red or a yellow highlighter, with an
- * eraser, undo and clear. Nothing is saved: the drawing lives in this component, survives closing the window and moving
- * between pages, and is gone on reload. Only the window itself takes clicks; the page underneath stays fully usable.
+ * Scratchpad, in the style of Quick Note: a floating window you can drag by its header and resize from any edge. It draws on a
+ * paper of your choice, in black, red or a yellow highlighter, with an eraser, a text tool, undo and clear. Nothing is saved: the
+ * drawing lives in this component, survives closing the window and moving between pages, and is gone on reload. Only the window
+ * itself takes clicks; the page underneath stays fully usable. Opened and closed from the speed-dial button (`FloatingTools`).
  */
-export function Scratchpad() {
-  const { t } = useApp();
+export function Scratchpad({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
   const canvas = React.useRef<ReactSketchCanvasRef>(null);
-  const [open, setOpen] = React.useState(false);
   const [rect, setRect] = React.useState<Rect | null>(null);
-  const [tool, setTool] = React.useState<"pen" | "eraser">("pen");
+  const [tool, setTool] = React.useState<Tool>("pen");
   const [pen, setPen] = React.useState<PenName>("black");
   const [paper, setPaper] = React.useState<Paper>("plain");
+  const [notes, setNotes] = React.useState<TextNote[]>([]);
+  /** A text box being typed: where it was clicked (px inside the paper) and its text so far. */
+  const [draft, setDraftState] = React.useState<{ x: number; y: number; text: string } | null>(null);
+  /** The same draft, readable synchronously: a blur can arrive in the same tick as Enter, and must not add the note twice. */
+  const draftRef = React.useRef<{ x: number; y: number; text: string } | null>(null);
+  const setDraft = (next: { x: number; y: number; text: string } | null) => {
+    draftRef.current = next;
+    setDraftState(next);
+  };
+  /** What was done, oldest first, so Undo takes back the last stroke or the last note, whichever came last. */
+  const history = React.useRef<("stroke" | "text")[]>([]);
+  const nextId = React.useRef(1);
 
-  function toggle() {
-    // The window is created on first open (it needs the screen size) and then kept mounted, so strokes persist.
-    setRect((current) => current ?? initialRect());
-    setOpen((value) => !value);
-  }
+  // The window is created on first open (it needs the screen size) and then kept mounted, so the drawing persists.
+  if (open && rect === null) setRect(initialRect());
 
   function choosePen(name: PenName) {
     setPen(name);
-    setTool("pen");
-    canvas.current?.eraseMode(false);
+    chooseTool(tool === "eraser" ? "pen" : tool);
   }
 
-  function chooseTool(next: "pen" | "eraser") {
+  function chooseTool(next: Tool) {
+    commitDraft();
     setTool(next);
     canvas.current?.eraseMode(next === "eraser");
   }
 
-  const segment = (active: boolean) => cn("h-7 rounded-md px-3 text-[14px] transition-colors", active ? "bg-card font-medium text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground");
+  function commitDraft() {
+    const current = draftRef.current;
+    if (!current) return;
+    setDraft(null);
+    const text = current.text.trim();
+    if (!text) return;
+    setNotes((prev) => [...prev, { id: nextId.current++, x: current.x, y: current.y, text, color: TEXT_COLORS[pen] }]);
+    history.current.push("text");
+  }
+
+  function undo() {
+    if (draftRef.current) return setDraft(null);
+    const last = history.current.pop();
+    if (last === "text") setNotes((prev) => prev.slice(0, -1));
+    else if (last === "stroke") canvas.current?.undo();
+  }
+
+  function clear() {
+    canvas.current?.clearCanvas();
+    setNotes([]);
+    setDraft(null);
+    history.current = [];
+  }
+
+  const segment = (active: boolean) => cn("flex h-7 items-center gap-1.5 rounded-md px-3 text-[14px] transition-colors", active ? "bg-card font-medium text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground");
 
   return (
-    // Covers the screen but takes no clicks itself: only the button and the window below are interactive.
-    // z-70 keeps it above the image lightbox (z-60) and the mobile sidebar sheet (z-50).
-    <div className="pointer-events-none fixed inset-0 z-[70]">
+    <>
       {rect && (
         <Rnd
           size={{ width: rect.width, height: rect.height }}
@@ -124,7 +165,7 @@ export function Scratchpad() {
             role="dialog"
             aria-modal={false}
             aria-label={t.scratchpad.title}
-            onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+            onKeyDown={(e) => e.key === "Escape" && !draft && onClose()}
             className="flex size-full animate-in flex-col overflow-hidden rounded-xl border-2 border-border bg-popover shadow-lg duration-150 fade-in zoom-in-95"
           >
             {/* Drag handle */}
@@ -147,7 +188,7 @@ export function Scratchpad() {
                   />
                 ))}
               </div>
-              <Button variant="ghost" size="sm" className="scratch-nodrag" onClick={() => setOpen(false)} aria-label={t.scratchpad.close}>
+              <Button variant="ghost" size="sm" className="scratch-nodrag" onClick={onClose} aria-label={t.scratchpad.close}>
                 {t.common.close}
               </Button>
             </header>
@@ -160,28 +201,29 @@ export function Scratchpad() {
                     key={name}
                     type="button"
                     role="radio"
-                    aria-checked={tool === "pen" && pen === name}
+                    aria-checked={tool !== "eraser" && pen === name}
                     aria-label={t.scratchpad.colors[name]}
                     title={t.scratchpad.colors[name]}
                     onClick={() => choosePen(name)}
-                    className={cn("grid size-6 place-items-center rounded-full border transition-shadow", tool === "pen" && pen === name ? "border-transparent ring-2 ring-foreground ring-offset-2 ring-offset-popover" : "border-border-strong")}
+                    className={cn("grid size-6 place-items-center rounded-full border transition-shadow", tool !== "eraser" && pen === name ? "border-transparent ring-2 ring-foreground ring-offset-2 ring-offset-popover" : "border-border-strong")}
                   >
                     <span className="size-4 rounded-full" style={{ backgroundColor: PENS[name].color.replace(/ \/ [\d.]+\)/, ")") }} />
                   </button>
                 ))}
               </div>
               <div role="radiogroup" aria-label={t.scratchpad.title} className="flex rounded-lg bg-muted p-0.5">
-                {(["pen", "eraser"] as const).map((option) => (
-                  <button key={option} type="button" role="radio" aria-checked={tool === option} onClick={() => chooseTool(option)} className={segment(tool === option)}>
+                {(["pen", "eraser", "text"] as const).map((option) => (
+                  <button key={option} type="button" role="radio" aria-checked={tool === option} onClick={() => chooseTool(option)} title={option === "text" ? t.scratchpad.textHint : undefined} className={segment(tool === option)}>
+                    {option === "pen" ? <Pencil className="size-3.5" aria-hidden /> : option === "eraser" ? <Eraser className="size-3.5" aria-hidden /> : <Type className="size-3.5" aria-hidden />}
                     {t.scratchpad[option]}
                   </button>
                 ))}
               </div>
               <div className="ml-auto flex">
-                <Button variant="ghost" size="sm" onClick={() => canvas.current?.undo()}>
+                <Button variant="ghost" size="sm" onClick={undo}>
                   {t.scratchpad.undo}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => canvas.current?.clearCanvas()}>
+                <Button variant="ghost" size="sm" onClick={clear}>
                   {t.scratchpad.clear}
                 </Button>
               </div>
@@ -198,23 +240,44 @@ export function Scratchpad() {
                 strokeWidth={PENS[pen].width}
                 eraserWidth={ERASER_WIDTH}
                 canvasColor="transparent"
+                onStroke={() => history.current.push("stroke")}
                 style={{ border: "none", touchAction: "none", cursor: tool === "eraser" ? "cell" : "crosshair" }}
               />
+
+              {/* Typed notes sit on top of the strokes. They only take clicks while the Text tool is armed. */}
+              <div className={cn("absolute inset-0 overflow-hidden", tool === "text" ? "cursor-text" : "pointer-events-none")} onClick={(e) => {
+                if (tool !== "text" || e.target !== e.currentTarget) return;
+                commitDraft();
+                const box = e.currentTarget.getBoundingClientRect();
+                setDraft({ x: e.clientX - box.left, y: e.clientY - box.top, text: "" });
+              }}>
+                {notes.map((note) => (
+                  <span key={note.id} className="pointer-events-none absolute text-[18px] leading-6 whitespace-pre" style={{ left: note.x, top: note.y, color: note.color }}>
+                    {note.text}
+                  </span>
+                ))}
+                {draft && (
+                  <input
+                    autoFocus
+                    value={draft.text}
+                    aria-label={t.scratchpad.textPlaceholder}
+                    placeholder={t.scratchpad.textPlaceholder}
+                    onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") commitDraft();
+                      if (e.key === "Escape") setDraft(null);
+                    }}
+                    onBlur={commitDraft}
+                    style={{ left: draft.x, top: draft.y - 4, color: TEXT_COLORS[pen] }}
+                    className="absolute h-8 w-48 max-w-[calc(100%-1rem)] border-b-2 border-dashed border-brand bg-transparent text-[18px] outline-none"
+                  />
+                )}
+              </div>
             </div>
           </div>
         </Rnd>
       )}
-
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        aria-label={t.scratchpad.open}
-        title={t.scratchpad.open}
-        className="pointer-events-auto absolute right-4 bottom-4 grid size-12 place-items-center rounded-full border-2 border-border bg-primary text-primary-foreground shadow-md transition-transform hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:right-6 sm:bottom-6"
-      >
-        <Pencil className="size-5" aria-hidden />
-      </button>
-    </div>
+    </>
   );
 }

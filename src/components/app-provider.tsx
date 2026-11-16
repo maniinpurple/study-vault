@@ -11,7 +11,7 @@ import type {
   NewSubject, NewSynthesizedProblem, NewTagSuggestion, PersonaPatch, ReviewInput, Subject, SubjectMemoryInput, SubjectPatch, SynthesizedProblemPatch, TagSuggestionFeedback, Topic,
   UploadPatch, UserApiKey, UserSnapshot,
 } from "@/lib/repo/types";
-import { patchCard, patchUser, removeCard, setCardTagLinks } from "@/lib/optimistic";
+import { patchCard, patchUpload, patchUser, removeCard, setCardTagLinks } from "@/lib/optimistic";
 import { shareStructure } from "@/lib/snapshot-share";
 import * as server from "@/server/actions";
 import type { ActionResult } from "@/server/result";
@@ -269,7 +269,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       async createSource(input) {
         const body = new FormData();
         const { files, thumbnail, ...meta } = input;
-        body.set("meta", JSON.stringify({ title: meta.title, subjectId: meta.subjectId ?? null, fileKind: meta.fileKind, pageCount: meta.pageCount }));
+        body.set("meta", JSON.stringify({ title: meta.title, subjectId: meta.subjectId ?? null, completed: meta.completed ?? false, deadline: meta.deadline ?? null, fileKind: meta.fileKind, pageCount: meta.pageCount }));
         files.forEach((file, i) => body.append("files", file, file instanceof File ? file.name : `page-${i + 1}`));
         if (thumbnail) body.set("thumbnail", thumbnail, "thumbnail.jpg");
         const res = await fetch("/api/sources", { method: "POST", body });
@@ -284,7 +284,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return created;
       },
       async updateSource(id, patch) {
-        await call(server.updateSourceAction(id, patch));
+        await act(() => server.updateSourceAction(id, patch), (s) => patchUpload(s, id, patch));
       },
       async deleteSource(id) {
         await call(server.deleteSourceAction(id));

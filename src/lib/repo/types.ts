@@ -129,6 +129,10 @@ export interface ExamUpload {
   fileSizeBytes: number;
   pageCount: number | null;
   sha256: string;
+  /** Homework tracker: the student has finished this source. */
+  completed: boolean;
+  /** Due date as a calendar day, `YYYY-MM-DD` (what the student typed; no time zone), or null. */
+  deadline: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -183,6 +187,8 @@ export interface MistakeCard {
   ocrRawText: string | null;
   ahaNote: string | null;
   isHighYield: boolean;
+  /** "Chưa hiểu rõ · Cần xem lại": listed first in the review queue until answered well or cleared. */
+  needsReview: boolean;
   highYieldNote: string | null;
   state: CardState;
   due: Date;
@@ -372,6 +378,9 @@ export interface NewExamUpload {
   title: string;
   sourceLabel?: string | null;
   subjectId?: string | null;
+  /** Homework tracker: already finished (default false) and the due day (`YYYY-MM-DD`). */
+  completed?: boolean;
+  deadline?: string | null;
   fileKind: FileKind;
   mimeType: string;
   fileSizeBytes: number;
@@ -384,7 +393,7 @@ export interface NewExamUpload {
   thumbnail?: Blob | null;
 }
 
-export type UploadPatch = Partial<Pick<ExamUpload, "title" | "sourceLabel" | "subjectId">>;
+export type UploadPatch = Partial<Pick<ExamUpload, "title" | "sourceLabel" | "subjectId" | "completed" | "deadline">>;
 
 /** A problem to save: snipped from a source (`examUploadId` + `cropBox`) or added on its own. Needs text or an image. */
 export interface NewProblem {
@@ -400,6 +409,8 @@ export interface NewProblem {
   /** Teacher meta-note. */
   highYieldNote?: string | null;
   isHighYield?: boolean;
+  /** Mark as not understood yet: listed first in review until answered well. */
+  needsReview?: boolean;
   tagIds?: string[];
   sourcePage?: number | null;
   cropBox?: CropBox | null;
@@ -422,7 +433,7 @@ export interface ReviewInput {
 }
 
 export type CardPatch = Partial<
-  Pick<MistakeCard, "title" | "questionLatex" | "solutionLatex" | "ahaNote" | "highYieldNote" | "isHighYield" | "topicId" | "isSuspended" | "ocrStatus" | "ocrModel" | "ocrConfidence" | "ocrRawText">
+  Pick<MistakeCard, "title" | "questionLatex" | "solutionLatex" | "ahaNote" | "highYieldNote" | "isHighYield" | "needsReview" | "topicId" | "isSuspended" | "ocrStatus" | "ocrModel" | "ocrConfidence" | "ocrRawText">
 >;
 
 export interface SubjectMemoryInput {

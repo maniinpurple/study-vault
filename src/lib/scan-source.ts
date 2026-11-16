@@ -88,7 +88,12 @@ async function decodePhoto(file: File): Promise<ImageBitmap> {
     // "from-image" applies the EXIF orientation so portrait phone photos are not sideways.
     return await createImageBitmap(file, { imageOrientation: "from-image" });
   } catch {
-    throw new ScanSourceError("UNREADABLE");
+    // A browser that does not know the option (older Safari) already applies EXIF orientation by default.
+    try {
+      return await createImageBitmap(file);
+    } catch {
+      throw new ScanSourceError("UNREADABLE");
+    }
   }
 }
 

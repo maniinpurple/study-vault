@@ -40,6 +40,10 @@ function StatusDot({ status }: { status: ReviewStatus }) {
   return <span className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT[status])} aria-hidden />;
 }
 
+function NeedsReviewBadge({ label }: { label: string }) {
+  return <span className="shrink-0 rounded-full border-2 border-warning bg-warning-soft px-1.5 py-0.5 text-caption font-medium text-warning">{label}</span>;
+}
+
 /** Grid view: a compact tile. The whole tile opens the editor. */
 export function ProblemTile({ card, status, onEdit }: ViewProps) {
   const { t, subject, topic, hasText } = useProblemContext(card);
@@ -48,6 +52,7 @@ export function ProblemTile({ card, status, onEdit }: ViewProps) {
       <span className="flex items-center gap-2 px-3 pt-2.5 pb-2 text-caption text-muted-foreground">
         <Dot color={subject?.color} />
         <span className="min-w-0 flex-1 truncate">{topic?.name ?? subject?.name}</span>
+        {card.needsReview && <NeedsReviewBadge label={t.problem.needsReview} />}
         {card.isHighYield && <span className="shrink-0 rounded-full bg-mark-soft px-1.5 py-0.5 font-medium text-mark-foreground">{t.problem.priority}</span>}
       </span>
       <span className="relative block h-32 overflow-hidden border-y border-border bg-white">
@@ -98,6 +103,7 @@ export function ProblemRow({ card, status, onEdit }: ViewProps) {
             <StoredImage fill path={card.originalCropPath} alt={t.problem.imageAlt} className="object-cover object-top" />
           </span>
         )}
+        {card.needsReview && <NeedsReviewBadge label={t.problem.needsReview} />}
         {card.isHighYield && <Flag className="size-3.5 shrink-0 text-mark-foreground" aria-label={t.problem.priority} />}
       </span>
       <span className="hidden min-w-0 space-y-0.5 md:block">
@@ -130,6 +136,7 @@ export function ProblemBox({ card, status, onEdit }: ViewProps) {
           {source && ` · ${source.title}`}
           {card.sourcePage !== null && source && ` · ${format(t.problem.pageShort, { n: card.sourcePage })}`}
         </span>
+        {card.needsReview && <NeedsReviewBadge label={t.problem.needsReview} />}
         {card.isHighYield && <span className="shrink-0 rounded-full bg-mark-soft px-2 py-0.5 font-medium text-mark-foreground">{t.problem.priority}</span>}
         <Button variant="ghost" size="icon-sm" onClick={onEdit} aria-label={t.common.edit} title={t.common.edit}>
           <Pencil />

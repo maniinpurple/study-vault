@@ -7,14 +7,17 @@ import * as React from "react";
 
 import { useVault } from "@/components/app-provider";
 import { Modal } from "@/components/modal";
+import { HomeworkControls } from "@/components/sources/homework-controls";
 import { StoredImage } from "@/components/stored-image";
 import { LoadMore, useVisibleCount } from "@/components/load-more";
 import { UploadDialog, type UploadDraft } from "@/components/sources/upload-dialog";
 import { SubjectDialog } from "@/components/subject-dialog";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/field";
 import { useStoredChoice } from "@/components/use-stored-choice";
 import { ViewToggle } from "@/components/view-toggle";
 import { STORAGE_KEYS, swatchColor } from "@/lib/constants";
+import { DEFAULT_SOURCE_SORT, SOURCE_SORTS, sortSources, todayIn, type SourceSort } from "@/lib/homework";
 import { format } from "@/lib/i18n";
 import { spring, staggerDelay } from "@/lib/motion";
 import { uploadThumbnailPath } from "@/lib/problems";
@@ -27,7 +30,7 @@ import { SOURCES_PAGE_SIZE } from "@/lib/vault";
 const ACCEPT = "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/webp,image/heic,image/heif,.pdf,.docx";
 
 export function SourcesLibrary() {
-  const { snapshot, t, locale, user, activeSubjectId, actions } = useVault();
+  const { snapshot, t, locale, user, loadedAt, activeSubjectId, actions } = useVault();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(false);
   const [over, setOver] = React.useState(false);
@@ -45,9 +48,12 @@ export function SourcesLibrary() {
 
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const scope = subjects.find((s) => s.id === activeSubjectId) ?? null;
-  const sources = snapshot.examUploads.filter((u) => !scope || u.subjectId === scope.id);
+  const [sort, setSort] = useStoredChoice<SourceSort>(STORAGE_KEYS.sourcesSort, SOURCE_SORTS, DEFAULT_SOURCE_SORT);
+  const sources = sortSources(snapshot.examUploads.filter((u) => !scope || u.subjectId === scope.id), sort, locale);
+  /** The student's own calendar day, which "overdue" and "due today" are measured against. */
+  const today = todayIn(loadedAt, user.timezone);
   const pageSize = SOURCES_PAGE_SIZE[view];
-  const [shown, showMore] = useVisibleCount(`${scope?.id ?? ""}|${view}`, pageSize);
+  const [shown, showMore] = useVisibleCount(`${scope?.id ?? ""}|${view}|${sort}`, pageSize);
   const visibleSources = sources.slice(0, shown);
   const snipCount = (id: string) => snapshot.cards.filter((c) => c.examUploadId === id && c.archivedAt === null).length;
   const dateFmt = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: user.timezone });
@@ -135,13 +141,23 @@ export function SourcesLibrary() {
         </button>
       ) : (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <label className="flex items-center gap-2 text-caption text-muted-foreground">
+              {t.homework.sortLabel}
+              <Select aria-label={t.homework.sortLabel} value={sort} onChange={(e) => setSort(e.target.value as SourceSort)} className="h-8 w-auto text-sm">
+                {SOURCE_SORTS.map((option) => (
+                  <option key={option} value={option}>
+                    {t.homework.sort[option]}
+                  </option>
+                ))}
+              </Select>
+            </label>
             <ViewToggle id="sources-view" label={t.common.view.label} value={view} modes={VIEW_MODES} labels={t.common.view} onChange={setView} />
           </div>
           <div className={cn(view === "list" && "overflow-hidden rounded-lg border border-border bg-card shadow-xs")}>
             {view === "list" && (
               <div aria-hidden className={cn("hidden gap-x-4 border-b border-border py-2 pr-14 pl-4 md:grid", LIST_COLUMNS)}>
-                {[t.sources.columns.title, t.sources.columns.subject, t.sources.columns.pages, t.sources.columns.snips, t.sources.columns.added].map((heading) => (
+                {[t.sources.columns.title, t.sources.columns.subject, t.sources.columns.pages, t.sources.columns.snips, t.sources.columns.added, t.homework.columnDeadline].map((heading) => (
                   <span key={heading} className="text-overline">
                     {heading}
                   </span>
@@ -152,7 +168,7 @@ export function SourcesLibrary() {
               {visibleSources.map((source, i) => {
                 const subject = subjects.find((s) => s.id === source.subjectId);
                 const count = snipCount(source.id);
-                const item = { source, subjectName: subject?.name ?? null, subjectColor: subject?.color ?? null, snipLabel: count > 0 ? format(t.sources.snips, { n: count }) : t.sources.noSnips, hasSnips: count > 0, pagesLabel: format(t.sources.pages, { n: source.pageCount ?? 1 }), dateLabel: dateFmt.format(source.createdAt) };
+                const item = { source, subjectName: subject?.name ?? null, subjectColor: subject?.color ?? null, snipLabel: count > 0 ? format(t.sources.snips, { n: count }) : t.sources.noSnips, hasSnips: count > 0, pagesLabel: format(t.sources.pages, { n: source.pageCount ?? 1 }), dateLabel: dateFmt.format(source.createdAt), today };
                 return (
                   <motion.li key={source.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring.smooth, delay: staggerDelay(i) }} className="group relative">
                     {view === "list" ? <SourceRow {...item} /> : <SourceCard {...item} compact={view === "grid"} />}
@@ -162,7 +178,7 @@ export function SourcesLibrary() {
                       aria-label={`${t.sources.delete}: ${source.title}`}
                       title={t.sources.delete}
                       onClick={() => setDeleting(source)}
-                      className={cn("absolute opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100", view === "list" ? "top-1/2 right-3 -translate-y-1/2" : "top-2 right-2 bg-card shadow-xs")}
+                      className={cn("absolute z-20 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100", view === "list" ? "top-1/2 right-3 -translate-y-1/2" : "top-2 right-2 bg-card shadow-xs")}
                     >
                       <Trash2 />
                     </Button>
@@ -207,9 +223,10 @@ interface ItemProps {
   snipLabel: string;
   hasSnips: boolean;
   dateLabel: string;
+  today: string;
 }
 
-const LIST_COLUMNS = "grid-cols-[minmax(0,1fr)] md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_6rem_8rem_7rem]";
+const LIST_COLUMNS = "grid-cols-[minmax(0,1fr)] md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.1fr)_5rem_7rem_6.5rem_minmax(0,2.6fr)]";
 
 function Thumbnail({ source, className, iconClass }: { source: ExamUpload; className: string; iconClass: string }) {
   return (
@@ -231,40 +248,45 @@ function SubjectDot({ color }: { color: string | null }) {
   return <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: swatchColor(color) ?? "var(--subtle-foreground)" }} aria-hidden />;
 }
 
-/** Grid (compact) and Detailed (large preview) cards. */
-function SourceCard({ source, subjectName, subjectColor, pagesLabel, snipLabel, hasSnips, dateLabel, compact }: ItemProps & { compact: boolean }) {
+/** Grid (compact) and Detailed (large preview) cards. The title area is a stretched link; the homework controls sit above it. */
+function SourceCard({ source, subjectName, subjectColor, pagesLabel, snipLabel, hasSnips, dateLabel, today, compact }: ItemProps & { compact: boolean }) {
   return (
-    <Link href={`/sources/${source.id}`} className="block overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-px hover:shadow-md">
-      <div className={cn("relative overflow-hidden border-b border-border bg-sunken", compact ? "aspect-[3/4]" : "aspect-[4/3]")}>
-        <Thumbnail source={source} className="size-full object-cover object-top" iconClass={compact ? "size-5" : "size-7"} />
-      </div>
-      <div className={cn("space-y-1", compact ? "p-2.5" : "p-3.5")}>
-        <h2 className={cn("truncate", compact ? "text-sm font-medium" : "text-heading")}>{source.title}</h2>
-        <p className="flex items-center gap-1.5 truncate text-caption text-muted-foreground">
-          {subjectName && <SubjectDot color={subjectColor} />}
-          {subjectName && <span className="truncate">{subjectName}</span>}
-          {subjectName && !compact && <span aria-hidden>·</span>}
-          {!compact && <span className="shrink-0 tabular-nums">{pagesLabel}</span>}
-        </p>
-        <p className="flex justify-between gap-2 text-caption text-subtle">
-          <span className={cn("tabular-nums", hasSnips && "font-medium text-mark-foreground")}>{snipLabel}</span>
-          {!compact && <span className="shrink-0">{dateLabel}</span>}
-        </p>
-      </div>
-    </Link>
+    <div className={cn("relative overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-px hover:shadow-md", source.completed && "opacity-80")}>
+      <Link href={`/sources/${source.id}`} className="block after:absolute after:inset-0 after:content-['']">
+        <div className={cn("relative overflow-hidden border-b border-border bg-sunken", compact ? "aspect-[3/4]" : "aspect-[4/3]")}>
+          <Thumbnail source={source} className="size-full object-cover object-top" iconClass={compact ? "size-5" : "size-7"} />
+        </div>
+        <div className={cn("space-y-1", compact ? "p-2.5" : "p-3.5")}>
+          <h2 className={cn("truncate", compact ? "text-sm font-medium" : "text-heading")}>{source.title}</h2>
+          <p className="flex items-center gap-1.5 truncate text-caption text-muted-foreground">
+            {subjectName && <SubjectDot color={subjectColor} />}
+            {subjectName && <span className="truncate">{subjectName}</span>}
+            {subjectName && !compact && <span aria-hidden>·</span>}
+            {!compact && <span className="shrink-0 tabular-nums">{pagesLabel}</span>}
+          </p>
+          <p className="flex justify-between gap-2 text-caption text-subtle">
+            <span className={cn("tabular-nums", hasSnips && "font-medium text-mark-foreground")}>{snipLabel}</span>
+            {!compact && <span className="shrink-0">{dateLabel}</span>}
+          </p>
+        </div>
+      </Link>
+      <HomeworkControls source={source} today={today} className={cn("relative z-10 border-t border-border", compact ? "p-2" : "px-3.5 py-2.5")} />
+    </div>
   );
 }
 
-/** List view: one full-width, table-like row. */
-function SourceRow({ source, subjectName, subjectColor, pagesLabel, snipLabel, hasSnips, dateLabel }: ItemProps) {
+/** List view: one full-width, table-like row. The title is a stretched link; the homework controls sit above it. */
+function SourceRow({ source, subjectName, subjectColor, pagesLabel, snipLabel, hasSnips, dateLabel, today }: ItemProps) {
   return (
-    <Link href={`/sources/${source.id}`} className={cn("grid items-center gap-x-4 gap-y-1 py-2.5 pr-14 pl-4 transition-colors hover:bg-muted", LIST_COLUMNS)}>
+    <div className={cn("relative grid items-center gap-x-4 gap-y-1 py-2.5 pr-14 pl-4 transition-colors hover:bg-muted", LIST_COLUMNS, source.completed && "opacity-80")}>
       <span className="flex min-w-0 items-center gap-3">
         <span className="relative h-12 w-9 shrink-0 overflow-hidden rounded border border-border bg-sunken">
           <Thumbnail source={source} className="size-full object-cover object-top" iconClass="size-4" />
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-heading">{source.title}</span>
+          <Link href={`/sources/${source.id}`} className="block truncate text-heading after:absolute after:inset-0 after:content-['']">
+            {source.title}
+          </Link>
           <span className="block truncate text-caption text-muted-foreground md:hidden">{[subjectName, pagesLabel, snipLabel].filter(Boolean).join(" · ")}</span>
         </span>
       </span>
@@ -281,6 +303,7 @@ function SourceRow({ source, subjectName, subjectColor, pagesLabel, snipLabel, h
       <span className="hidden text-sm text-muted-foreground tabular-nums md:block">{pagesLabel}</span>
       <span className={cn("hidden text-sm tabular-nums md:block", hasSnips ? "font-medium text-mark-foreground" : "text-subtle")}>{snipLabel}</span>
       <span className="hidden text-caption text-muted-foreground md:block">{dateLabel}</span>
-    </Link>
+      <HomeworkControls source={source} today={today} className="relative z-10 col-span-full md:col-span-1" />
+    </div>
   );
 }
