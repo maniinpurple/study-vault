@@ -18,7 +18,13 @@ export const NAV_LAYOUTS = ["sidebar", "topbar"] as const;
 export type NavLayout = (typeof NAV_LAYOUTS)[number];
 export const DEFAULT_LAYOUT: NavLayout = "sidebar";
 
+/** The interface mode: the full interface, or the typography-only "Ultra-minimal" (zero-chrome) one. */
+export const UI_MODES = ["standard", "ultra-minimal"] as const;
+export type UiMode = (typeof UI_MODES)[number];
+export const DEFAULT_UI_MODE: UiMode = "standard";
+
 export const APPEARANCE_KEYS = {
+  uiMode: "vl:ui-mode",
   style: "vl:theme-style",
   layout: "vl:layout",
   /** The chosen accent as `#rrggbb`. */
@@ -64,6 +70,7 @@ export type AccentVars = Record<Mode, AccentTokens>;
 const HEX = /^#[0-9a-f]{6}$/;
 export const isHexColor = (value: unknown): value is string => typeof value === "string" && HEX.test(value);
 export const isThemeStyle = (value: unknown): value is ThemeStyle => THEME_STYLES.some((style) => style === value);
+export const isUiMode = (value: unknown): value is UiMode => UI_MODES.some((mode) => mode === value);
 export const isNavLayout = (value: unknown): value is NavLayout => NAV_LAYOUTS.some((layout) => layout === value);
 
 /** `#RRGGBB` / `#rgb` (any case) → `#rrggbb`, or null. What `<input type="color">` and hand-typed values go through. */
@@ -181,5 +188,5 @@ export const surfaceWithinLimit = (mode: Mode, rgb: Rgb) => (mode === "light" ? 
  * purpose and self-contained; every value is validated against a fixed set or a strict colour pattern before it touches the DOM.
  */
 export function bootScript(prefsKey: string): string {
-  return `try{var d=document.documentElement,g=function(k){try{return localStorage.getItem(k)}catch(e){return null}};var p=JSON.parse(g(${JSON.stringify(prefsKey)})||"null");if(p){if(p.theme)d.dataset.mode=p.theme==="light"?"light":"dark";if(p.lang)d.lang=p.lang}var s=g(${JSON.stringify(APPEARANCE_KEYS.style)});if(${JSON.stringify(THEME_STYLES)}.indexOf(s)>-1)d.dataset.theme=s;var l=g(${JSON.stringify(APPEARANCE_KEYS.layout)});if(${JSON.stringify(NAV_LAYOUTS)}.indexOf(l)>-1)d.dataset.layout=l;var a=JSON.parse(g(${JSON.stringify(APPEARANCE_KEYS.accentVars)})||"null");if(a){var K=${JSON.stringify(TOKEN_VARS)},H=/^#[0-9a-f]{6}$/,css="",ok=true;["light","dark"].forEach(function(m){var v=a[m]||{},r=[];for(var k in K){if(!H.test(v[k])){ok=false;return}r.push(K[k]+":"+v[k])}css+='html[data-theme][data-mode="'+m+'"]{'+r.join(";")+"}"});if(ok){var e=document.createElement("style");e.id="vl-accent";e.textContent=css;document.head.appendChild(e)}}}catch(e){}`;
+  return `try{var d=document.documentElement,g=function(k){try{return localStorage.getItem(k)}catch(e){return null}};var p=JSON.parse(g(${JSON.stringify(prefsKey)})||"null");if(p){if(p.theme)d.dataset.mode=p.theme==="light"?"light":"dark";if(p.lang)d.lang=p.lang}var s=g(${JSON.stringify(APPEARANCE_KEYS.style)});if(${JSON.stringify(THEME_STYLES)}.indexOf(s)>-1)d.dataset.theme=s;var u=g(${JSON.stringify(APPEARANCE_KEYS.uiMode)});if(${JSON.stringify(UI_MODES)}.indexOf(u)>-1)d.dataset.uiMode=u;var l=g(${JSON.stringify(APPEARANCE_KEYS.layout)});if(${JSON.stringify(NAV_LAYOUTS)}.indexOf(l)>-1)d.dataset.layout=l;var a=JSON.parse(g(${JSON.stringify(APPEARANCE_KEYS.accentVars)})||"null");if(a){var K=${JSON.stringify(TOKEN_VARS)},H=/^#[0-9a-f]{6}$/,css="",ok=true;["light","dark"].forEach(function(m){var v=a[m]||{},r=[];for(var k in K){if(!H.test(v[k])){ok=false;return}r.push(K[k]+":"+v[k])}css+='html[data-theme][data-mode="'+m+'"]{'+r.join(";")+"}"});if(ok){var e=document.createElement("style");e.id="vl-accent";e.textContent=css;document.head.appendChild(e)}}}catch(e){}`;
 }

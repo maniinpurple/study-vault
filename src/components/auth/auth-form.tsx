@@ -1,5 +1,6 @@
 "use client";
 
+import { playLanguageSwitch } from "@/components/switch-effects";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -75,7 +76,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         </p>
         <div role="radiogroup" aria-label={t.header.language} className="flex gap-1 text-caption">
           {LANGUAGES.map((code) => (
-            <button key={code} type="button" role="radio" aria-checked={code === language} onClick={() => setLanguage(code)} title={t.language[code]} className={cn("rounded px-1.5 py-0.5 tabular-nums", code === language ? "font-medium text-foreground" : "text-subtle hover:text-foreground")}>
+            <button key={code} type="button" role="radio" aria-checked={code === language} onClick={(e) => code !== language && playLanguageSwitch(e.currentTarget, () => setLanguage(code))} title={t.language[code]} className={cn("rounded px-1.5 py-0.5 tabular-nums", code === language ? "font-medium text-foreground" : "text-subtle hover:text-foreground")}>
               {code}
             </button>
           ))}

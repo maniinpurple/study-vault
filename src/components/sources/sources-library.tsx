@@ -8,6 +8,9 @@ import * as React from "react";
 import { useVault } from "@/components/app-provider";
 import { Modal } from "@/components/modal";
 import { HomeworkControls } from "@/components/sources/homework-controls";
+import { SourcesTable } from "@/components/sources/sources-table";
+import { UltraSplit } from "@/components/ultra-split";
+import { useAppearance } from "@/components/use-appearance";
 import { StoredImage } from "@/components/stored-image";
 import { LoadMore, useVisibleCount } from "@/components/load-more";
 import { UploadDialog, type UploadDraft } from "@/components/sources/upload-dialog";
@@ -49,7 +52,9 @@ export function SourcesLibrary() {
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const scope = subjects.find((s) => s.id === activeSubjectId) ?? null;
   const [sort, setSort] = useStoredChoice<SourceSort>(STORAGE_KEYS.sourcesSort, SOURCE_SORTS, DEFAULT_SOURCE_SORT);
-  const sources = sortSources(snapshot.examUploads.filter((u) => !scope || u.subjectId === scope.id), sort, locale);
+  const ultra = useAppearance().uiMode === "ultra-minimal";
+  const subjectNameOf = (source: ExamUpload) => subjects.find((s) => s.id === source.subjectId)?.name ?? null;
+  const sources = sortSources(snapshot.examUploads.filter((u) => !scope || u.subjectId === scope.id), sort, locale, subjectNameOf);
   /** The student's own calendar day, which "overdue" and "due today" are measured against. */
   const today = todayIn(loadedAt, user.timezone);
   const pageSize = SOURCES_PAGE_SIZE[view];
@@ -82,6 +87,7 @@ export function SourcesLibrary() {
   }
 
   return (
+    <UltraSplit kind="sources">
     <div
       className="space-y-8"
       onDragOver={(e) => {
@@ -98,7 +104,7 @@ export function SourcesLibrary() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1.5">
           <h1 className="text-display">{t.sources.title}</h1>
-          <p className="max-w-xl text-muted-foreground">{t.sources.subtitle}</p>
+          <p className="vl-standard-only max-w-xl text-muted-foreground">{t.sources.subtitle}</p>
         </div>
         <Button size="lg" disabled={busy} onClick={() => inputRef.current?.click()}>
           {busy ? <Loader2 className="animate-spin" /> : <Upload />}
@@ -141,6 +147,10 @@ export function SourcesLibrary() {
         </button>
       ) : (
         <div className="space-y-4">
+          {ultra ? (
+            <SourcesTable sources={visibleSources} subjectName={subjectNameOf} snipCount={(source) => snipCount(source.id)} today={today} sort={sort} onSort={setSort} onDelete={setDeleting} />
+          ) : (
+            <>
           <div className="flex flex-wrap items-center justify-end gap-3">
             <label className="flex items-center gap-2 text-caption text-muted-foreground">
               {t.homework.sortLabel}
@@ -187,6 +197,8 @@ export function SourcesLibrary() {
               })}
             </ul>
           </div>
+            </>
+          )}
           <LoadMore remaining={sources.length - visibleSources.length} step={pageSize} onMore={showMore} />
         </div>
       )}
@@ -212,6 +224,7 @@ export function SourcesLibrary() {
         </div>
       </Modal>
     </div>
+    </UltraSplit>
   );
 }
 

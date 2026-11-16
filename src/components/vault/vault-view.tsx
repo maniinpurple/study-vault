@@ -14,6 +14,8 @@ import { ProblemBox, ProblemRow, ProblemRowHeader, ProblemTile } from "@/compone
 import { QuickCaptureButton } from "@/components/quick-capture";
 import { Button } from "@/components/ui/button";
 import { Field, Select, Textarea } from "@/components/ui/field";
+import { UltraSplit } from "@/components/ultra-split";
+import { useAppearance } from "@/components/use-appearance";
 import { useObjectUrl } from "@/components/use-object-url";
 import { LoadMore, useVisibleCount } from "@/components/load-more";
 import { useStoredChoice } from "@/components/use-stored-choice";
@@ -40,7 +42,10 @@ export function VaultView() {
   const [priorityOnly, setPriorityOnly] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [adding, setAdding] = React.useState(false);
-  const [view, setView] = useStoredChoice<ViewMode>(STORAGE_KEYS.vaultView, VIEW_MODES, "box");
+  const [storedView, setView] = useStoredChoice<ViewMode>(STORAGE_KEYS.vaultView, VIEW_MODES, "box");
+  // Ultra-minimal shows the vault only as hairline rows; the grid and detailed views (and their switch) stay for Standard mode.
+  const ultra = useAppearance().uiMode === "ultra-minimal";
+  const view = ultra ? "list" : storedView;
 
   const subjects = snapshot.subjects.filter((s) => s.archivedAt === null);
   const scope = subjects.find((s) => s.id === activeSubjectId) ?? null;
@@ -65,11 +70,11 @@ export function VaultView() {
   }
 
   return (
-    <div className="space-y-6">
+    <UltraSplit kind="vault">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1.5">
           <h1 className="text-display">{t.vault.title}</h1>
-          <p className="max-w-xl text-muted-foreground">{t.vault.subtitle}</p>
+          <p className="vl-standard-only max-w-xl text-muted-foreground">{t.vault.subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="lg" onClick={() => setAdding(true)}>
@@ -81,7 +86,7 @@ export function VaultView() {
       </header>
 
       {/* Controls: sticky, so grouping and filters stay at hand while scrolling the grid. */}
-      <div className="sticky top-(--chrome) z-20 -mx-4 space-y-3 border-b border-border bg-background/92 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="vl-vault-controls sticky top-(--chrome) z-20 -mx-4 space-y-3 border-b border-border bg-background/92 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative min-w-52 flex-1">
             <span className="sr-only">{t.vault.search}</span>
@@ -146,7 +151,9 @@ export function VaultView() {
               {filtered ? `${visible.length} / ` : ""}
               {format(t.vault.count, { n: total })}
             </p>
-            <ViewToggle id="vault-view" label={t.common.view.label} value={view} modes={VIEW_MODES} labels={t.common.view} onChange={setView} />
+            <div className="vl-standard-only">
+              <ViewToggle id="vault-view" label={t.common.view.label} value={storedView} modes={VIEW_MODES} labels={t.common.view} onChange={setView} />
+            </div>
           </div>
         </div>
       </div>
@@ -191,7 +198,7 @@ export function VaultView() {
       <Modal open={adding} onClose={() => setAdding(false)} title={t.vault.newTitle} description={t.vault.newBody} className="w-[min(40rem,calc(100vw-2rem))]">
         <NewProblemForm defaultSubjectId={scope?.id ?? subjects[0]?.id ?? null} onClose={() => setAdding(false)} />
       </Modal>
-    </div>
+    </UltraSplit>
   );
 }
 

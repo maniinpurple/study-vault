@@ -67,6 +67,17 @@ describe("sortSources", () => {
     expect(sortSources(names, "name", "vi").map((i) => i.title)).toEqual(["Bài kiểm tra", "de 2", "DE 11", "Đề 1", "Đề 10"]);
   });
 
+  it("subject: by subject name, none last, ties by title", () => {
+    const named = [item("a", { title: "Z" }), item("b", { title: "B" }), item("c", { title: "A" }), item("d", { title: "Y" })];
+    const subjects: Record<string, string | null> = { a: "Toán", b: "Lý", c: null, d: "Toán" };
+    expect(ids(sortSources(named, "subject", "vi", (i) => subjects[i.id]))).toEqual(["b", "d", "a", "c"]);
+  });
+
+  it("status: unfinished first, each group in deadline order", () => {
+    const sorted = sortSources(list, "status", "vi");
+    expect(ids(sorted)).toEqual(["overdue", "soon", "late", "none-new", "none-old", "done-early"]);
+  });
+
   it("does not modify its input", () => {
     const copy = [...list];
     sortSources(list, "name", "en");

@@ -13,6 +13,7 @@ import { LanguageSwitcher } from "@/components/language-switcher";
 import { FloatingTools } from "@/components/floating-tools";
 import { SubjectDialog } from "@/components/subject-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { UltraNav } from "@/components/ultra-nav";
 import { Button } from "@/components/ui/button";
 import { useApplyAppearance } from "@/components/use-appearance";
 import { useStoredFlag } from "@/components/use-stored-flag";
@@ -311,6 +312,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Button>
             <span className="font-serif text-[15px] font-medium">{t.app.name}</span>
           </header>
+          {/* Ultra-minimal interface mode: one row of plain words instead of the sidebar. Shown by CSS only. */}
+          <React.Suspense fallback={null}>
+            <UltraNav />
+          </React.Suspense>
           <main className="min-w-0 flex-1">{children}</main>
         </div>
 

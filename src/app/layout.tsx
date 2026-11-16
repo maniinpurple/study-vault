@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 
-import { DEFAULT_LAYOUT, DEFAULT_STYLE, bootScript } from "@/lib/appearance";
+import { DEFAULT_LAYOUT, DEFAULT_STYLE, DEFAULT_UI_MODE, bootScript } from "@/lib/appearance";
 import { DEFAULT_THEME, STORAGE_KEYS, THEME_ATTRIBUTE } from "@/lib/constants";
 import { DEFAULT_UI_LANGUAGE, getDictionary } from "@/lib/i18n";
 
@@ -37,6 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       data-theme={DEFAULT_STYLE}
       data-mode={THEME_ATTRIBUTE[DEFAULT_THEME]}
       data-layout={DEFAULT_LAYOUT}
+      data-ui-mode={DEFAULT_UI_MODE}
       suppressHydrationWarning
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >

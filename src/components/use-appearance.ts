@@ -8,6 +8,8 @@ import {
   DEFAULT_LAYOUT,
   DEFAULT_STYLE,
   NAV_LAYOUTS,
+  UI_MODES,
+  DEFAULT_UI_MODE,
   THEME_STYLES,
   accentCss,
   deriveAccentVars,
@@ -15,6 +17,7 @@ import {
   normalizeHex,
   type NavLayout,
   type ThemeStyle,
+  type UiMode,
 } from "@/lib/appearance";
 import { useStoredChoice } from "@/components/use-stored-choice";
 
@@ -45,6 +48,7 @@ function subscribeAccent(notify: () => void) {
 export function useAppearance() {
   const [style, setStyle] = useStoredChoice<ThemeStyle>(APPEARANCE_KEYS.style, THEME_STYLES, DEFAULT_STYLE);
   const [layout, setLayout] = useStoredChoice<NavLayout>(APPEARANCE_KEYS.layout, NAV_LAYOUTS, DEFAULT_LAYOUT);
+  const [uiMode, setUiMode] = useStoredChoice<UiMode>(APPEARANCE_KEYS.uiMode, UI_MODES, DEFAULT_UI_MODE);
   const accent = React.useSyncExternalStore(subscribeAccent, readAccent, () => DEFAULT_ACCENT);
 
   const setAccent = React.useCallback((next: string) => {
@@ -60,12 +64,12 @@ export function useAppearance() {
     window.dispatchEvent(new Event(ACCENT_EVENT));
   }, []);
 
-  return { style, setStyle, layout, setLayout, accent, setAccent };
+  return { style, setStyle, layout, setLayout, uiMode, setUiMode, accent, setAccent };
 }
 
 /** Mirrors the stored choices onto <html>: `data-theme`, `data-layout` and the `#vl-accent` stylesheet. Mount once. */
 export function useApplyAppearance() {
-  const { style, layout, accent } = useAppearance();
+  const { style, layout, uiMode, accent } = useAppearance();
 
   React.useEffect(() => {
     document.documentElement.dataset.theme = style;
@@ -74,6 +78,10 @@ export function useApplyAppearance() {
   React.useEffect(() => {
     document.documentElement.dataset.layout = layout;
   }, [layout]);
+
+  React.useEffect(() => {
+    document.documentElement.dataset.uiMode = uiMode;
+  }, [uiMode]);
 
   React.useEffect(() => {
     let element = document.getElementById("vl-accent");

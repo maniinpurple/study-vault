@@ -10,6 +10,8 @@ import { useVault } from "@/components/app-provider";
 import { Modal } from "@/components/modal";
 import { HelpTip } from "@/components/sources/help-tip";
 import { SnipCard } from "@/components/sources/snip-card";
+import { DarkroomBar } from "@/components/sources/darkroom-bar";
+import { useAppearance } from "@/components/use-appearance";
 import { usePanKey } from "@/components/use-pan-key";
 import { useStoredChoice } from "@/components/use-stored-choice";
 import { SourcePage, type PageSnip, type PendingRegion, type RegionToolbar } from "@/components/sources/source-page";
@@ -103,6 +105,11 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
   const [panKeyMode] = useStoredChoice(STORAGE_KEYS.panKey, PAN_KEY_MODES, DEFAULT_PAN_KEY_MODE);
   const panKeyOn = usePanKey(panKeyMode, true);
   const cropping = snipMode && !panKeyOn;
+  // Ultra-minimal: the "Darkroom" layout (slim dark bar, charcoal canvas, floating notes card).
+  const ultra = useAppearance().uiMode === "ultra-minimal";
+  const [notesOpen, setNotesOpen] = React.useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches);
+  const pageNowRef = React.useRef<HTMLSpanElement>(null);
+  const lastPageCheck = React.useRef(0);
   const viewerRef = React.useRef<HTMLDivElement>(null);
   const trayRef = React.useRef<HTMLDivElement>(null);
   const zoomLabelRef = React.useRef<HTMLSpanElement>(null);
@@ -244,9 +251,26 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
     }
   }, [currentPage, sourceId]);
 
+  /** The "n / N" of the Darkroom bar, written straight to the DOM (at most every 120ms: it follows every frame of a pan or zoom). */
+  const updatePageLabel = React.useCallback(() => {
+    const now = performance.now();
+    if (now - lastPageCheck.current < 120) return;
+    lastPageCheck.current = now;
+    if (pageNowRef.current) pageNowRef.current.textContent = String(currentPage());
+  }, [currentPage]);
+
+  const stepPage = React.useCallback(
+    (delta: number) => {
+      const total = live.current.doc?.pageCount ?? 1;
+      goToPage(Math.min(total, Math.max(1, currentPage() + delta)));
+    },
+    [currentPage, goToPage],
+  );
+
   const selectFromPage = React.useCallback((id: string) => {
     setSelectedId(id);
     setTrayOpen(true);
+    setNotesOpen(true);
     trayRef.current?.querySelector(`[data-snip-card="${id}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, []);
 
@@ -255,6 +279,8 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
       setSelectedId(id);
       if (page === null) return;
       setTrayOpen(false);
+      // On a phone the notes card covers the page: put it away once a card is chosen.
+      if (!window.matchMedia("(min-width: 640px)").matches) setNotesOpen(false);
       // The tray is hidden on small screens until the viewer is shown again; wait a frame for it to lay out.
       requestAnimationFrame(() => goToPage(page));
     },
@@ -304,8 +330,30 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
   const tool = (active: boolean) => cn("relative flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[14px] transition-colors", active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground");
 
   return (
-    <div className="flex h-[calc(100dvh-var(--chrome))] flex-col">
+    <div className={cn("flex h-[calc(100dvh-var(--chrome))] flex-col", ultra && "bg-zinc-900")}>
+      {ultra && (
+        <DarkroomBar
+          upload={upload}
+          subjectId={subjectId}
+          subjects={subjects}
+          title={title}
+          setTitle={setTitle}
+          pageCount={doc?.pageCount ?? 0}
+          pageNowRef={pageNowRef}
+          onStep={stepPage}
+          zoomRef={zoomRef}
+          zoomLabelRef={zoomLabelRef}
+          snipMode={snipMode}
+          panKeyOn={panKeyOn}
+          setSnipMode={setSnipMode}
+          onRotate={rotateCurrentPage}
+          notesOpen={notesOpen}
+          onNotes={() => setNotesOpen((open) => !open)}
+          snipCount={snips.length}
+        />
+      )}
       {/* Toolbar */}
+      {!ultra && (
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2">
         <Link href="/sources" aria-label={t.sources.back} title={t.sources.back} className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           <ChevronLeft className="size-4" aria-hidden />
@@ -364,11 +412,12 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
           </Button>
         </div>
       </header>
+      )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className={cn("flex min-h-0 flex-1", ultra && "relative")}>
         {/* Document: pinch (or ctrl + wheel) zooms, two-finger scroll pans; dragging pans only in the Scroll tool. */}
-        <div className={cn("relative flex min-w-0 flex-1 flex-col bg-sunken", trayOpen && "hidden lg:flex")}>
-          <p className="z-10 shrink-0 border-b border-border bg-sunken px-4 py-1.5 text-caption text-muted-foreground" role={error ? "alert" : undefined}>
+        <div className={cn("relative flex min-w-0 flex-1 flex-col bg-sunken", ultra && "bg-zinc-800/95", !ultra && trayOpen && "hidden lg:flex")}>
+          <p className={cn("z-10 shrink-0 border-b border-border bg-sunken px-4 py-1.5 text-caption text-muted-foreground", ultra && "border-zinc-700 bg-transparent text-zinc-300", ultra && !error && !panKeyOn && "hidden")} role={error ? "alert" : undefined}>
             {error ? (
               <span className="text-destructive">{error}</span>
             ) : panKeyOn ? (
@@ -407,6 +456,7 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
                 onTransform={(ref) => {
                   // Straight to the DOM: this fires every frame while zooming, and must not re-render the pages.
                   viewerRef.current?.style.setProperty("--zoom", String(ref.state.scale));
+                  updatePageLabel();
                   if (zoomLabelRef.current) zoomLabelRef.current.textContent = `${Math.round(ref.state.scale * 100)}%`;
                 }}
               >
@@ -414,7 +464,7 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
                   <div className="mx-auto w-full max-w-[60rem] space-y-5 px-4 py-5 sm:px-6">
                     {Array.from({ length: doc.pageCount }, (_, i) => i + 1).map((page) => (
                       <div key={page} className="space-y-1.5">
-                        <p className="text-caption text-subtle tabular-nums">{format(t.problem.page, { n: page })}</p>
+                        <p className={cn("text-caption text-subtle tabular-nums", ultra && "text-zinc-400")}>{format(t.problem.page, { n: page })}</p>
                         <SourcePage
                           doc={doc}
                           page={page}
@@ -463,9 +513,17 @@ export function SourceWorkspace({ sourceId }: { sourceId: string }) {
         </div>
 
         {/* Snippets tray */}
-        <aside ref={trayRef} aria-label={t.sources.tray.title} className={cn("w-full shrink-0 overflow-y-auto border-border bg-background lg:block lg:w-[400px] lg:border-l", trayOpen ? "block" : "hidden")}>
+        <aside
+          ref={trayRef}
+          aria-label={ultra ? t.ultra.notes : t.sources.tray.title}
+          className={
+            ultra
+              ? cn("absolute inset-x-3 top-3 bottom-3 z-20 overflow-y-auto rounded-lg border border-border bg-background text-foreground shadow-lg sm:inset-x-auto sm:right-4 sm:w-80", notesOpen ? "block" : "hidden")
+              : cn("w-full shrink-0 overflow-y-auto border-border bg-background lg:block lg:w-[400px] lg:border-l", trayOpen ? "block" : "hidden")
+          }
+        >
           <div className="sticky top-0 z-10 flex items-baseline justify-between border-b border-border bg-background/90 px-4 py-2.5 backdrop-blur-sm">
-            <h2 className="text-heading">{t.sources.tray.title}</h2>
+            <h2 className={cn("text-heading", ultra && "text-[11px] font-normal tracking-wider text-muted-foreground uppercase")}>{ultra ? t.ultra.notes : t.sources.tray.title}</h2>
             <span className="text-caption text-subtle tabular-nums">{snips.length > 0 ? format(t.sources.snips, { n: snips.length }) : ""}</span>
           </div>
           {snips.length === 0 ? (

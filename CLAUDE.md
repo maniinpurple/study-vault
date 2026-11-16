@@ -80,6 +80,9 @@ Package manager: **npm**. Path alias: `@/*` → `src/*`.
   `data-theme` (style: minimal | doodle | cafe | brutalism | stitch | retro | tetris; localStorage `vl:theme-style`), `data-layout` (sidebar | topbar; `vl:layout`), and the accent
   (`vl:accent`, `vl:accent-vars` → `<style id="vl-accent">`). Pure logic, constants and the pre-hydration `bootScript()` are in `src/lib/appearance.ts`; hooks in `src/components/use-appearance.ts`
   (`useApplyAppearance()` is mounted in `AppShell`); the picker UI is in `settings-view.tsx`.
+- **Interface mode** (`data-ui-mode`, `vl:ui-mode`; `standard` | `ultra-minimal`; Settings → Appearance): Ultra-minimal is a typography-only look with its own palette and structure rules (text-only top row `ultra-nav.tsx`,
+  `ultra-split.tsx` subject column on /sources and /vault, `sources-table.tsx`, the Darkroom viewer `darkroom-bar.tsx`, text-link buttons, no cards). Components read it with `useAppearance().uiMode` only where the
+  *structure* differs; everything else is CSS under `html[data-ui-mode="ultra-minimal"]` (see DESIGN_SYSTEM.md §2.6). Every feature must stay reachable in both modes.
 - **Tokens** are CSS variables in `globals.css` as `#RRGGBB` or `oklch()`, one declaration per line. A style's CSS lives only in `[data-theme="x"]` / `[data-theme="x"][data-mode="y"]` blocks and
   sets only `--variables`. `tests/design-tokens.test.ts` parses the file and enforces WCAG AA for every style × mode and a sweep of accent colours, plus that isolation.
   **Never hard-code colors, radii, border widths or shadows in components**: use the Tailwind tokens (`bg-background`, `bg-card`, `bg-primary`, `bg-accent`, `border-border`, `border-input`,

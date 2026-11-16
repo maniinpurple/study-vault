@@ -1,6 +1,7 @@
 "use client";
 
 import { useApp } from "@/components/app-provider";
+import { playLanguageSwitch } from "@/components/switch-effects";
 import { LANGUAGES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,11 @@ export function LanguageSwitcher() {
           role="radio"
           aria-checked={language === current}
           title={t.language[language]}
-          onClick={() => void actions.setUiLanguage(language)}
+          onClick={(e) => {
+            if (language === current) return;
+            // A shockwave from this button; the language changes as it leaves.
+            playLanguageSwitch(e.currentTarget, () => void actions.setUiLanguage(language));
+          }}
           className={cn(
             "tabular-nums rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
             language === current ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",

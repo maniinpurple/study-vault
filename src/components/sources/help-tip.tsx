@@ -6,7 +6,7 @@ import { useApp } from "@/components/app-provider";
 import { cn } from "@/lib/utils";
 
 /** A small "?" button whose popover explains the viewer's controls. Opens on hover and focus, toggles on click, closes on Esc. */
-export function HelpTip() {
+export function HelpTip({ buttonClassName }: { buttonClassName?: string }) {
   const { t } = useApp();
   const id = React.useId();
   const [pinned, setPinned] = React.useState(false);
@@ -37,7 +37,7 @@ export function HelpTip() {
         onClick={() => setPinned((v) => !v)}
         onFocus={() => setHovered(true)}
         onBlur={() => setHovered(false)}
-        className={cn("grid size-7 place-items-center rounded-full border text-[14px] font-medium transition-colors", open ? "border-transparent bg-accent text-accent-foreground" : "border-border text-muted-foreground hover:text-foreground")}
+        className={cn("grid size-7 place-items-center rounded-full border text-[14px] font-medium transition-colors", open ? "border-transparent bg-accent text-accent-foreground" : "border-border text-muted-foreground hover:text-foreground", buttonClassName)}
       >
         ?
       </button>

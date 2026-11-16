@@ -82,6 +82,7 @@ export function FloatingTools() {
                   </span>
                   <button
                     type="button"
+                    data-fab="item"
                     role="menuitemcheckbox"
                     aria-label={label[id]}
                     aria-checked={openTools[id]}
@@ -102,6 +103,7 @@ export function FloatingTools() {
         <button
           type="button"
           onClick={() => setMenu((v) => !v)}
+          data-fab="main"
           aria-expanded={menu}
           aria-controls={menu ? "fab-menu" : undefined}
           aria-haspopup="menu"

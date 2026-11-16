@@ -4,11 +4,13 @@ import { motion } from "framer-motion";
 import type * as React from "react";
 
 import { useVault } from "@/components/app-provider";
+import { playLanguageSwitch } from "@/components/switch-effects";
 import { useAppearance } from "@/components/use-appearance";
+import { useModeSwitch } from "@/components/use-mode-switch";
 import { useStoredChoice } from "@/components/use-stored-choice";
 import { ApiVault } from "@/components/api-vault";
 import { Field, Select } from "@/components/ui/field";
-import { ACCENT_PRESETS, NAV_LAYOUTS, THEME_STYLES, normalizeHex, type ThemeStyle } from "@/lib/appearance";
+import { ACCENT_PRESETS, NAV_LAYOUTS, THEME_STYLES, UI_MODES, normalizeHex, type ThemeStyle } from "@/lib/appearance";
 import { LANGUAGES, STORAGE_KEYS, THEME_ATTRIBUTE, THEME_CHOICES, type Language } from "@/lib/constants";
 import { DEFAULT_PAN_KEY_MODE, PAN_KEY_MODES } from "@/lib/pan-key";
 import { spring } from "@/lib/motion";
@@ -28,13 +30,13 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 }
 
 /** Segmented control whose thumb slides between options (shared layout). */
-function Segmented<T extends string>({ id, label, value, options, onChange }: { id: string; label: string; value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void }) {
+function Segmented<T extends string>({ id, label, value, options, onChange }: { id: string; label: string; value: T; options: readonly { value: T; label: string }[]; onChange: (value: T, origin: HTMLElement) => void }) {
   return (
     <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg bg-muted p-0.5">
       {options.map((option) => {
         const active = option.value === value;
         return (
-          <button key={option.value} type="button" role="radio" aria-checked={active} onClick={() => onChange(option.value)} className={cn("relative h-8 min-w-20 rounded-md px-3 text-sm transition-colors", active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>
+          <button key={option.value} type="button" role="radio" aria-checked={active} onClick={(e) => onChange(option.value, e.currentTarget)} className={cn("relative h-8 min-w-20 rounded-md px-3 text-sm transition-colors", active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>
             {active && <motion.span layoutId={`${id}-thumb`} transition={spring.snappy} className="absolute inset-0 rounded-md border-2 border-border bg-card shadow-xs" aria-hidden />}
             <span className="relative">{option.label}</span>
           </button>
@@ -129,7 +131,8 @@ export function SettingsView() {
   const { t, user, actions } = useVault();
   const mode = THEME_ATTRIBUTE[user.theme];
   const theme = THEME_CHOICES.find((choice) => choice.mode === mode) ?? THEME_CHOICES[0];
-  const { style, setStyle, accent, setAccent, layout, setLayout } = useAppearance();
+  const { style, setStyle, accent, setAccent, layout, setLayout, uiMode, setUiMode } = useAppearance();
+  const switchMode = useModeSwitch();
   const [panKey, setPanKey] = useStoredChoice(STORAGE_KEYS.panKey, PAN_KEY_MODES, DEFAULT_PAN_KEY_MODE);
 
   return (
@@ -140,6 +143,11 @@ export function SettingsView() {
       </header>
 
       <Section title={t.settings.appearance} hint={t.settings.appearanceHint}>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">{t.ultra.modeLabel}</p>
+          <p className="text-caption text-muted-foreground">{t.ultra.modeHint}</p>
+          <Segmented id="ui-mode" label={t.ultra.modeLabel} value={uiMode} options={UI_MODES.map((mode) => ({ value: mode, label: t.ultra.modes[mode] }))} onChange={setUiMode} />
+        </div>
         <div className="space-y-2">
           <p className="text-sm font-medium">{t.appearance.styleLabel}</p>
           <p className="text-caption text-muted-foreground">{t.appearance.styleHint}</p>
@@ -161,11 +169,11 @@ export function SettingsView() {
         </div>
         <div className="space-y-2">
           <p className="text-sm font-medium">{t.appearance.modeLabel}</p>
-          <Segmented id="theme" label={t.appearance.modeLabel} value={theme.value} options={THEME_CHOICES.map((choice) => ({ value: choice.value, label: t.theme[choice.value] }))} onChange={(value) => void actions.setTheme(value)} />
+          <Segmented id="theme" label={t.appearance.modeLabel} value={theme.value} options={THEME_CHOICES.map((choice) => ({ value: choice.value, label: t.theme[choice.value] }))} onChange={(value, origin) => value !== theme.value && switchMode(value, origin)} />
         </div>
         <div className="space-y-2">
           <p className="text-sm font-medium">{t.header.language}</p>
-          <Segmented id="language" label={t.header.language} value={user.uiLanguage} options={LANGUAGES.map((language) => ({ value: language, label: t.language[language] }))} onChange={(value) => void actions.setUiLanguage(value)} />
+          <Segmented id="language" label={t.header.language} value={user.uiLanguage} options={LANGUAGES.map((language) => ({ value: language, label: t.language[language] }))} onChange={(value, origin) => value !== user.uiLanguage && playLanguageSwitch(origin, () => void actions.setUiLanguage(value))} />
         </div>
         <p className="text-caption text-subtle">{t.appearance.deviceNote}</p>
       </Section>

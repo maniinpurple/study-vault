@@ -51,12 +51,18 @@ function tokens(selector: string): Map<string, Rgb> {
 }
 
 const accentDefaults: Record<Mode, Map<string, Rgb>> = { light: tokens('html[data-mode="light"]'), dark: tokens('html[data-mode="dark"]') };
-const palettes = THEME_STYLES.flatMap((style) =>
+const stylePalettes = THEME_STYLES.flatMap((style) =>
   MODES.map((mode) => {
     const own = tokens(`[data-theme="${style}"][data-mode="${mode}"]`);
-    return { style, mode, tokens: new Map([...accentDefaults[mode], ...own]), own };
+    return { style: style as string, mode, tokens: new Map([...accentDefaults[mode], ...own]), own };
   }),
 );
+/** The interface mode "Ultra-minimal" brings a complete palette of its own, so it is held to the same contract as a style. */
+const ultraPalettes = MODES.map((mode) => {
+  const own = tokens(`html[data-ui-mode="ultra-minimal"][data-mode="${mode}"]`);
+  return { style: "ultra-minimal", mode, tokens: new Map([...accentDefaults[mode], ...own]), own };
+});
+const palettes = [...stylePalettes, ...ultraPalettes];
 
 const SURFACES = ["background", "card", "sunken", "popover"];
 const PAIRS: [string, string[], number][] = [
@@ -117,7 +123,8 @@ describe("style palettes", () => {
   describe.each(palettes)("$style / $mode", ({ style, mode, tokens: all }) => {
     it("keeps surfaces within the limits the accent derivation relies on, and never a pure white or black page", () => {
       for (const surface of SURFACES) expect(surfaceWithinLimit(mode, all.get(surface)!), `${style} ${mode} ${surface}`).toBe(true);
-      expect(rgbToHex(all.get("background")!)).not.toMatch(/^#(FFFFFF|000000)$/);
+      // Ultra-minimal is the one look whose page is deliberately pure white / near-black.
+      if (style !== "ultra-minimal") expect(rgbToHex(all.get("background")!)).not.toMatch(/^#(FFFFFF|000000)$/);
     });
     it.each(PAIRS)("%s clears its contrast target", (text, surfaces, min) => {
       for (const surface of surfaces) expect(contrastRatio(all.get(text)!, all.get(surface)!), `${text} on ${surface}`).toBeGreaterThanOrEqual(min);
@@ -201,6 +208,11 @@ describe("boot script (runs before first paint)", () => {
     return { root, appended };
   }
 
+  it("restores the interface mode, and ignores an unknown one", () => {
+    expect(run({ [APPEARANCE_KEYS.uiMode]: "ultra-minimal" }).root.dataset.uiMode).toBe("ultra-minimal");
+    expect(run({ [APPEARANCE_KEYS.uiMode]: "brutal" }).root.dataset.uiMode).toBeUndefined();
+  });
+
   it("restores mode, language, style, layout and accent from localStorage", () => {
     const vars = deriveAccentVars("#f0605d");
     const { root, appended } = run({
@@ -235,6 +247,21 @@ describe("boot script (runs before first paint)", () => {
 });
 
 describe("globals.css isolation", () => {
+  it("Ultra-minimal: pure canvas (#FFFFFF light, #0A0A0A dark) and only variables in its structure block", () => {
+    expect(rgbToHex(ultraPalettes[0].own.get("background")!)).toBe("#FFFFFF");
+    expect(rgbToHex(ultraPalettes[1].own.get("background")!)).toBe("#0A0A0A");
+    for (const selector of ['html[data-ui-mode="ultra-minimal"]', 'html[data-ui-mode="ultra-minimal"][data-mode="light"]', 'html[data-ui-mode="ultra-minimal"][data-mode="dark"]']) {
+      const body = block(selector).split("{")[1];
+      for (const declaration of body.split(/;\s*\n/).map((d) => d.trim()).filter(Boolean)) expect(declaration.startsWith("--"), `${selector}: ${declaration}`).toBe(true);
+    }
+  });
+
+  it("scopes every ultra-minimal element rule to the attribute (or to its own helper classes)", () => {
+    const selectors = [...css.matchAll(/^(html\[data-ui-mode="ultra-minimal"\][^{\n]*|\.vl-(?:ultra-only|split)[^{\n]*) \{/gm)].map((m) => m[1]);
+    expect(selectors.length).toBeGreaterThan(10);
+    for (const selector of selectors) expect(selector, selector).toMatch(/^(html\[data-ui-mode="ultra-minimal"\]|\.vl-ultra-only|\.vl-split)/);
+  });
+
   it("lists every style and layout the app offers", () => {
     expect(THEME_STYLES).toEqual(["minimal", "doodle", "cafe", "brutalism", "stitch", "retro", "tetris"]);
     expect(NAV_LAYOUTS).toEqual(["sidebar", "topbar"]);

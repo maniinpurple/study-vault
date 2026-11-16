@@ -97,6 +97,22 @@ Four independent settings, each owning its own attribute or variables, so none c
 - Adding a style: add its id to `THEME_STYLES`, a structure block + light and dark palette blocks to `globals.css` (same token set), and its name and description to both
   dictionaries. The token test then checks it automatically.
 
+### 2.6 Interface mode: Standard and Ultra-minimal (Settings → Appearance)
+
+A fifth attribute, `data-ui-mode` on `<html>` (`vl:ui-mode`, per device, set before first paint by `bootScript`): `standard` (everything above) or `ultra-minimal`, a distraction-free,
+typography-only look that keeps every feature. It is separate from the theme: the mode replaces a theme's *look*, not the accent, the light / dark choice or the language.
+
+- **Tokens**: `html[data-ui-mode="ultra-minimal"]` and its `[data-mode]` blocks hold a complete palette of their own (page `#FFFFFF` / `#0A0A0A`, hairlines zinc-200 / zinc-800) plus the shape variables
+  (1px outline, no shadows, no lift, flat paper), so whichever style is selected, this look wins. `tests/design-tokens.test.ts` holds it to the same AA contract (and the accent sweep) as a style.
+- **Structure** (CSS under the attribute, plus `.vl-ultra-only` / `.vl-standard-only` helpers): no sidebar, side bar or mobile bar; a text-only top row (`ultra-nav.tsx`: plain words, bold = current, muted
+  = others, no icons, backgrounds or borders; language, light / dark and account at its end); `max-w-5xl px-8 py-10` pages; no cards (`.border.bg-card` loses border, fill, radius and shadow); wobble is off; buttons are
+  text (the primary action is an underlined brand-colored link, the rest lose their box).
+- **/sources and /vault**: a `w-48` SUBJECTS column (`ultra-split.tsx`: filter field with a bottom line, plain name-and-count rows) beside the list. Sources show a hairline table (`sources-table.tsx`: file name,
+  topic, due date, status — the homework fields, editable in place — with the column headers under the rows acting as sorts). The vault is always hairline rows (the view switch is hidden).
+- **Document viewer** (`/sources/[id]`): the Darkroom (`darkroom-bar.tsx`): a single `h-12` zinc-900 bar (back, breadcrumb with editable subject and title, due date, pages, zoom, rotate, select area / pan, help; status,
+  notes, download), a charcoal canvas and a floating `w-80` notes card holding the cropped questions, their AI reconstruction and analysis.
+- **Kept as is**: the speed-dial button (monochrome circles via `[data-fab]`), Scratchpad, Math Pad, the circular mode reveal and the language shockwave.
+
 ---
 
 ## 3. Typography

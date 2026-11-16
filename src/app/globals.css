@@ -558,6 +558,75 @@ html[data-mode="dark"] {
   --scrim: oklch(0.1 0.04 270 / 0.68);
 }
 
+/* ═════════ ULTRA-MINIMAL interface mode: pure canvas, typography only. It replaces the style's palette and shape ═════════
+   (`data-ui-mode` outranks `data-theme`, so whichever style is chosen, this look wins), and keeps the accent. */
+html[data-ui-mode="ultra-minimal"] {
+  --r-xs: 2px;
+  --r-sm: 2px;
+  --r-md: 3px;
+  --r-lg: 4px;
+  --r-xl: 6px;
+  --r-2xl: 6px;
+  --bw: 1px;
+  --card-border-style: solid;
+  --lift: 0px;
+  --press: 0px;
+  --icon-stroke: 1.5;
+  --display-line: none;
+  --dialog-tilt: 0deg;
+  --paper-image: none;
+  --paper-size: auto;
+  --chrome: 0rem;
+  --elevation-xs: 0 0 #0000;
+  --elevation-sm: 0 0 #0000;
+  --elevation-md: 0 4px 14px -4px color-mix(in oklab, var(--shadow-ink) 14%, transparent);
+  --elevation-lg: 0 12px 30px -8px color-mix(in oklab, var(--shadow-ink) 22%, transparent);
+}
+html[data-ui-mode="ultra-minimal"][data-mode="light"] {
+  --background: #ffffff;
+  --sunken: #fafafa;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --border: #e4e4e7;
+  --input: #71717a;
+  --foreground: #09090b;
+  --muted-foreground: #52525b;
+  --subtle-foreground: #71717a;
+  --mark: #fde68a;
+  --mark-soft: #fef3c7;
+  --mark-foreground: #713f12;
+  --success: #15803d;
+  --success-soft: #dcfce7;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --destructive: #c81e1e;
+  --destructive-soft: #fee2e2;
+  --shadow-ink: #09090b;
+  --scrim: oklch(0.2 0 0 / 0.4);
+}
+html[data-ui-mode="ultra-minimal"][data-mode="dark"] {
+  --background: #0a0a0a;
+  --sunken: #111111;
+  --card: #0a0a0a;
+  --popover: #141414;
+  --border: #27272a;
+  --input: #71717a;
+  --foreground: #fafafa;
+  --muted-foreground: #a1a1aa;
+  --subtle-foreground: #8e8e98;
+  --mark: #f6ce45;
+  --mark-soft: #3b3210;
+  --mark-foreground: #f5de86;
+  --success: #4ade80;
+  --success-soft: #12331f;
+  --warning: #fbbf24;
+  --warning-soft: #3a2b0b;
+  --destructive: #f87171;
+  --destructive-soft: #40191b;
+  --shadow-ink: #000000;
+  --scrim: oklch(0 0 0 / 0.6);
+}
+
 @layer base {
   * {
     border-color: var(--border);
@@ -721,6 +790,139 @@ html[data-mode="dark"] {
   .vl-mobilebar {
     display: none;
   }
+}
+
+/*
+ * ULTRA-MINIMAL interface mode (`data-ui-mode="ultra-minimal"`, DESIGN_SYSTEM.md §2.6): the structure that variables cannot express.
+ * Every rule is scoped to the attribute, so Standard mode is untouched. Unlayered, so it beats the layered Tailwind utilities.
+ */
+.vl-ultra-only {
+  display: none;
+}
+html[data-ui-mode="ultra-minimal"] .vl-ultra-only {
+  display: block;
+}
+html[data-ui-mode="ultra-minimal"] .vl-standard-only {
+  display: none;
+}
+/* The shell: no sidebar, no side navigation, no mobile bar. The text row (`.vl-ultra-only`) replaces them. */
+html[data-ui-mode="ultra-minimal"] .vl-rail,
+html[data-ui-mode="ultra-minimal"] .vl-topnav,
+html[data-ui-mode="ultra-minimal"] .vl-mobilebar {
+  display: none;
+}
+/* Breathing room: a max-w-5xl column with px-8 / py-10. */
+html[data-ui-mode="ultra-minimal"] .vl-page {
+  max-width: 64rem;
+  padding: 2.5rem 2rem;
+}
+/* /sources and /vault: a subject column on the left, the list on the right. */
+.vl-split {
+  display: block;
+}
+html[data-ui-mode="ultra-minimal"] .vl-split {
+  display: flex;
+  align-items: flex-start;
+  gap: 3rem;
+}
+@media (max-width: 767px) {
+  html[data-ui-mode="ultra-minimal"] .vl-split {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  html[data-ui-mode="ultra-minimal"] .vl-split > .vl-ultra-only {
+    width: 100%;
+  }
+}
+html[data-ui-mode="ultra-minimal"] .vl-vault-controls {
+  margin-inline: 0;
+  padding-inline: 0;
+}
+
+/* No cards: no border, no fill, no radius, no shadow. Lists keep only their hairline dividers. */
+html[data-ui-mode="ultra-minimal"] .border.bg-card {
+  border-width: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+/* Wobble belongs to Doodle only. */
+html[data-ui-mode="ultra-minimal"] .rounded-sm {
+  border-radius: var(--r-sm);
+}
+html[data-ui-mode="ultra-minimal"] .rounded-md {
+  border-radius: var(--r-md);
+}
+html[data-ui-mode="ultra-minimal"] .rounded-lg {
+  border-radius: var(--r-lg);
+}
+html[data-ui-mode="ultra-minimal"] .rounded-xl {
+  border-radius: var(--r-xl);
+}
+html[data-ui-mode="ultra-minimal"] .rounded-2xl {
+  border-radius: var(--r-2xl);
+}
+
+/* Buttons are text. The primary action is an underlined link; every other button loses its box (hover shows a hairline of muted ground). */
+html[data-ui-mode="ultra-minimal"] .group\/button {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  translate: none;
+}
+html[data-ui-mode="ultra-minimal"] .group\/button.bg-primary {
+  height: auto;
+  padding-inline: 0;
+  color: var(--brand);
+  font-weight: 500;
+  text-decoration-line: underline;
+  text-underline-offset: 4px;
+}
+html[data-ui-mode="ultra-minimal"] .group\/button.bg-primary:hover:not(:disabled) {
+  opacity: 0.7;
+}
+html[data-ui-mode="ultra-minimal"] .group\/button:not(.bg-primary):hover:not(:disabled) {
+  background-color: var(--muted);
+}
+
+/* The speed-dial button and its two satellites: understated monochrome circles. */
+html[data-ui-mode="ultra-minimal"] [data-fab] {
+  background-color: var(--background);
+  color: var(--foreground);
+  border-width: 1px;
+  border-color: var(--border);
+  box-shadow: var(--elevation-md);
+  translate: none;
+}
+html[data-ui-mode="ultra-minimal"] [data-fab="main"] {
+  background-color: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+html[data-ui-mode="ultra-minimal"] [data-fab][aria-checked="true"] {
+  border-color: var(--foreground);
+}
+
+/*
+ * Light / Dark switch (switch-effects.ts): the browser's default cross-fade between the old and new page is turned off, and the
+ * new page is revealed by a circular clip-path animated from script. While it runs, CSS transitions are suspended so colors do
+ * not animate on top of the reveal.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}
+html.vl-switching *,
+html.vl-switching *::before,
+html.vl-switching *::after {
+  transition: none !important;
 }
 
 /* Native <dialog> (Modal) and its backdrop. Doodle tilts it slightly as it settles (`--dialog-tilt`). */

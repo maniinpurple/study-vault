@@ -6,7 +6,7 @@
  * until their midnight.
  */
 
-export const SOURCE_SORTS = ["deadline", "uploaded", "name"] as const;
+export const SOURCE_SORTS = ["deadline", "uploaded", "name", "subject", "status"] as const;
 export type SourceSort = (typeof SOURCE_SORTS)[number];
 export const DEFAULT_SOURCE_SORT: SourceSort = "deadline";
 
@@ -55,14 +55,22 @@ const newestFirst = (a: HomeworkItem, b: HomeworkItem) => b.createdAt.getTime() 
  *    always last, newest upload first among themselves.
  *  - `uploaded`: newest first.
  *  - `name`: A–Z, accents and digits handled for `locale`.
+ *  - `subject`: by subject name A–Z (needs `subjectName`); sources without a subject last.
+ *  - `status`: unfinished before finished, then by deadline order.
  */
-export function sortSources<T extends HomeworkItem>(items: readonly T[], sort: SourceSort, locale: string): T[] {
+export function sortSources<T extends HomeworkItem>(items: readonly T[], sort: SourceSort, locale: string, subjectName: (item: T) => string | null = () => null): T[] {
   const list = [...items];
   if (sort === "uploaded") return list.sort(newestFirst);
-  if (sort === "name") {
-    const collator = new Intl.Collator(locale, { sensitivity: "base", numeric: true });
-    return list.sort((a, b) => collator.compare(a.title, b.title) || newestFirst(a, b));
+  const collator = new Intl.Collator(locale, { sensitivity: "base", numeric: true });
+  if (sort === "name") return list.sort((a, b) => collator.compare(a.title, b.title) || newestFirst(a, b));
+  if (sort === "subject") {
+    return list.sort((a, b) => {
+      const [sa, sb] = [subjectName(a), subjectName(b)];
+      if ((sa === null) !== (sb === null)) return sa === null ? 1 : -1;
+      return (sa !== null && sb !== null ? collator.compare(sa, sb) : 0) || collator.compare(a.title, b.title) || newestFirst(a, b);
+    });
   }
+  if (sort === "status") return sortSources(list, "deadline", locale).sort((a, b) => Number(a.completed) - Number(b.completed));
   return list.sort((a, b) => {
     if ((a.deadline === null) !== (b.deadline === null)) return a.deadline === null ? 1 : -1;
     if (a.deadline === null || b.deadline === null) return newestFirst(a, b);
